@@ -64,13 +64,14 @@ patchers:
 
 ```sh
 git clone https://github.com/rexglue/rexglue-sdk.git
-git -C rexglue-sdk checkout f22cd9dc360dda5700358f7452230af24c2c2e69
+git -C rexglue-sdk checkout c94f5ebdcb3c9d1a460ca48e04f9758448f8d518  # ReXGlue 0.10.0
 git -C rexglue-sdk submodule update --init --recursive
 
 python3 port/extract_iso.py "/path/to/Diablo III ... (USA).iso"
 # or use the graphical installer:
 ./install-diablo3.sh
-./port/codegen.sh                 # transcode game/default.xex (~12 min)
+./port/build_sdk.sh               # build/install the pinned SDK (~10 min first time)
+./port/codegen.sh                 # transcode game/default.xex (~1 min)
 ./port/build.sh -c RelWithDebInfo # -> port/out/build/linux-amd64-relwithdebinfo/diablo3
 python3 apply_config.py --game-data-root "$PWD/game"
 ./launch-diablo3.sh                # first run caches the runtime env (~20 s), then ~2 s
@@ -82,16 +83,17 @@ On non-NixOS systems, install the distro packages listed in
 built inside Nix is tied to `/nix/store` and is not portable to a machine
 without Nix — rebuild on the target, or install Nix there too.
 
-The scripts apply the pinned Windows/D3D12 port patch and
-`patches/rexglue-sdk-linux.patch`, the consolidated Linux delta (shared input
-slot arbiter, non-D3D12 `RtLogActive()` stub, Vulkan host-render-target resolve
-hooks, the texture-fetch exponent fix, and the borderless GTK window). The
-`rexglue-sdk-common.patch` and `rexglue-sdk-vulkan.patch` files are empty
-compatibility stubs. The game logic, kernel hooks and input patches are portable.
-The Vulkan rendering port is verified end-to-end with real game data on a Linux
-desktop (Intel Arc B390 / Mesa): native 1440p at 60 FPS with correct UI,
-lighting and audio. Other GPUs and drivers may still need per-vendor tuning.
-See [docs/LINUX.md](docs/LINUX.md) for prerequisites, status and known gaps.
+The scripts apply the pinned ReXGlue 0.10 registration/object-reference/
+keyboard/username/System Link patches, the Windows/D3D12 runtime patch, and
+`patches/rexglue-sdk-linux.patch`, the Linux delta (Vulkan host-render-target
+resolve hooks, the texture-fetch `exp_adjust` fix, SDL borderless windows,
+SDL HIDAPI/udev controller enumeration and polling, cvar/shared-memory teardown
+fixes, and unit-test harness fixes). The game logic, kernel hooks and input
+patches are portable. The Vulkan rendering port is verified end-to-end with
+real game data on a Linux desktop (Intel Arc B390 / Mesa): native 1440p at
+60 FPS with correct UI, lighting and audio. Other GPUs and drivers may still
+need per-vendor tuning. See [docs/LINUX.md](docs/LINUX.md) for prerequisites,
+status and known gaps.
 
 ---
 

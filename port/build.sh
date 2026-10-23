@@ -1,8 +1,8 @@
 #!/bin/sh
 # build.sh - configure and build the Diablo III port on Linux.
 #
-# Builds the recompiled game plus the ReXGlue runtime from ../rexglue-sdk,
-# using the linux-amd64-* CMake presets. Produces a native ELF at
+# Builds the recompiled game against the ReXGlue SDK installed by
+# build_sdk.sh, using the linux-amd64-* CMake presets. Produces a native ELF at
 # port/out/build/linux-amd64-<config>/diablo3.
 #
 # Requirements (Debian/Ubuntu names):
@@ -17,9 +17,10 @@
 #                   [--sdk DIR] [--no-patch]
 #
 # Environment:
-#   REXSDK_DIR  ReXGlue SDK checkout (default: <repo>/rexglue-sdk)
-#   CC / CXX    Compiler overrides (default: clang-20 if present, else clang)
-#   JOBS        Parallel build jobs
+#   REXSDK_DIR      ReXGlue SDK checkout (default: <repo>/rexglue-sdk)
+#   REXSDK_INSTALL  SDK install prefix (default: <SDK>/out/install/linux-amd64)
+#   CC / CXX        Compiler overrides (default: clang-20 if present, else clang)
+#   JOBS            Parallel build jobs
 
 set -eu
 
@@ -29,6 +30,7 @@ PORT_DIR="$REPO_ROOT/port"
 CONFIG=RelWithDebInfo
 JOBS=${JOBS:-}
 SDK=${REXSDK_DIR:-"$REPO_ROOT/rexglue-sdk"}
+SDK_INSTALL=${REXSDK_INSTALL:-"$SDK/out/install/linux-amd64"}
 CLEAN=0
 APPLY_PATCH=1
 
@@ -70,24 +72,16 @@ if [ -n "${CXX:-}" ]; then COMPILER_CXX=$CXX; elif command -v clang++-20 >/dev/n
 command -v "$COMPILER_C" >/dev/null 2>&1 || die "C compiler '$COMPILER_C' not found"
 command -v "$COMPILER_CXX" >/dev/null 2>&1 || die "C++ compiler '$COMPILER_CXX' not found"
 
-# The pinned port patch targets the SDK revision recorded in
-# port/diablo3_manifest.toml (v0.8.1.32-dev.gf22cd9d). A checkout with the
-# port patches committed on top is fine, so check ancestry rather than HEAD.
-# Warn, don't fail: a rebased tree may still be close enough to be useful.
-SDK_BASE=f22cd9dc360dda5700358f7452230af24c2c2e69
-if git -C "$SDK" rev-parse --git-dir >/dev/null 2>&1; then
-    if ! git -C "$SDK" merge-base --is-ancestor "$SDK_BASE" HEAD 2>/dev/null; then
-        SDK_HEAD=$(git -C "$SDK" rev-parse --short HEAD 2>/dev/null || echo unknown)
-        echo "WARNING: SDK is at $SDK_HEAD, patch was written for f22cd9d (v0.8.1-dev)." >&2
-    fi
-fi
-
 if [ "$APPLY_PATCH" = 1 ]; then
     "$PORT_DIR/apply_sdk_patches.sh" "$SDK"
 fi
 
-if [ ! -f "$PORT_DIR/generated/rexglue.cmake" ]; then
-    die "port/generated is missing. Run ./port/codegen.sh first (needs game/default.xex)."
+if [ ! -f "$PORT_DIR/generated/default/sources.cmake" ]; then
+    die "port/generated/default/sources.cmake is missing. Run ./port/codegen.sh first (needs game/default.xex)."
+fi
+if [ ! -f "$SDK_INSTALL/lib/cmake/rexglue/rexglueConfig.cmake" ] &&
+   [ ! -f "$SDK_INSTALL/lib64/cmake/rexglue/rexglueConfig.cmake" ]; then
+    die "ReXGlue SDK is not installed at $SDK_INSTALL. Build/install the SDK first (see docs/LINUX.md)."
 fi
 
 if [ "$CLEAN" = 1 ] && [ -d "$BUILD_DIR" ]; then
@@ -95,7 +89,7 @@ if [ "$CLEAN" = 1 ] && [ -d "$BUILD_DIR" ]; then
     rm -rf "$BUILD_DIR"
 fi
 
-CMAKE_ARGS="-DREXSDK_DIR=$SDK -DREXGLUE_ENABLE_TRACY=OFF"
+CMAKE_ARGS="-DCMAKE_PREFIX_PATH=$SDK_INSTALL -DREXGLUE_ENABLE_TRACY=OFF"
 # Override the preset compiler only when the user asked for a specific one or
 # clang-20 is unavailable (the preset hardcodes clang-20).
 if [ -n "${CC:-}${CXX:-}" ] || ! command -v clang-20 >/dev/null 2>&1; then

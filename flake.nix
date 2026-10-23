@@ -59,7 +59,7 @@
             export CXX=clang++
             # These libraries are dlopen()ed by the Vulkan loader/SDL3 rather
             # than linked, so put them on the loader search path.
-            export LD_LIBRARY_PATH="${pkgs.vulkan-loader}/lib:${pkgs.libglvnd}/lib:${pkgs.mesa}/lib:${pkgs.alsa-lib}/lib:${pkgs.libpulseaudio}/lib:${pkgs.pipewire}/lib:${pkgs.udev}/lib:''${LD_LIBRARY_PATH:-}"
+            export LD_LIBRARY_PATH="${pkgs.vulkan-loader}/lib:${pkgs.libglvnd}/lib:${pkgs.mesa}/lib:${pkgs.libx11}/lib:${pkgs.libxcb}/lib:${pkgs.libxext}/lib:${pkgs.libxrandr}/lib:${pkgs.libxi}/lib:${pkgs.libxcursor}/lib:${pkgs.libxinerama}/lib:${pkgs.libxscrnsaver}/lib:${pkgs.libxfixes}/lib:${pkgs.libxkbcommon}/lib:${pkgs.alsa-lib}/lib:${pkgs.libpulseaudio}/lib:${pkgs.pipewire}/lib:${pkgs.udev}/lib:''${LD_LIBRARY_PATH:-}"
             echo "Souls of the Reaper - Linux dev shell"
             echo "  ./port/codegen.sh    # transcode game/default.xex (needs game data)"
             echo "  ./port/build.sh      # build port/out/build/linux-amd64-relwithdebinfo/diablo3"

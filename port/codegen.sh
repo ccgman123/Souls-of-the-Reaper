@@ -1,9 +1,9 @@
 #!/bin/sh
-# codegen.sh - run ReXGlue codegen for the Diablo III port on Linux.
+# codegen.sh - run ReXGlue 0.10 codegen for the Diablo III port on Linux.
 #
-# Builds the SDK's `rexglue` tool from source, translates game/default.xex into
-# port/generated/default/, then re-applies the hand patches that codegen cannot
-# emit (setjmp/longjmp and main-menu exit).
+# Uses the SDK installed by build_sdk.sh (building it first if needed),
+# translates game/default.xex into port/generated/default/, then re-applies the
+# hand patches that codegen cannot emit (setjmp/longjmp and main-menu exit).
 #
 # This is the Linux equivalent of steps 1-2 in the README.
 #
@@ -15,9 +15,10 @@
 #   ./port/codegen.sh [--sdk DIR] [--force] [-j N]
 #
 # Environment:
-#   REXSDK_DIR  ReXGlue SDK checkout (default: <repo>/rexglue-sdk)
-#   CC / CXX    Compiler overrides
-#   JOBS        Parallel build jobs
+#   REXSDK_DIR      ReXGlue SDK checkout (default: <repo>/rexglue-sdk)
+#   REXSDK_INSTALL  SDK install prefix (default: <SDK>/out/install/linux-amd64)
+#   CC / CXX        Compiler overrides
+#   JOBS            Parallel build jobs
 
 set -eu
 
@@ -27,6 +28,7 @@ MANIFEST="$PORT_DIR/diablo3_manifest.toml"
 XEX="$REPO_ROOT/game/default.xex"
 
 SDK=${REXSDK_DIR:-"$REPO_ROOT/rexglue-sdk"}
+SDK_INSTALL=${REXSDK_INSTALL:-"$SDK/out/install/linux-amd64"}
 JOBS=${JOBS:-}
 FORCE=""
 
@@ -59,33 +61,22 @@ if [ -n "${CXX:-}" ]; then COMPILER_CXX=$CXX; elif command -v clang++-20 >/dev/n
 
 "$PORT_DIR/apply_sdk_patches.sh" "$SDK"
 
-SDK_BUILD="$SDK/out/build/linux-amd64-codegen"
-
-# The SDK code assumes SSSE3/SSE4.1 (and its own Linux preset uses
-# -march=x86-64-v3), but this direct configure bypasses that preset. Match it
-# on x86-64; on ARM64 the default -march is correct.
-ARCH_FLAGS=""
-case "$(uname -m)" in
-    x86_64|amd64) ARCH_FLAGS="-DCMAKE_C_FLAGS=-march=x86-64-v3 -DCMAKE_CXX_FLAGS=-march=x86-64-v3" ;;
-esac
-
-echo "==> Building rexglue (SDK at $SDK)"
-# shellcheck disable=SC2086
-cmake -S "$SDK" -B "$SDK_BUILD" -G Ninja \
-    -DCMAKE_BUILD_TYPE=Release \
-    -DCMAKE_C_COMPILER="$COMPILER_C" \
-    -DCMAKE_CXX_COMPILER="$COMPILER_CXX" \
-    $ARCH_FLAGS \
-    -DREXGLUE_ENABLE_TRACY=OFF
-
-if [ -n "$JOBS" ]; then
-    cmake --build "$SDK_BUILD" --target rexglue --parallel "$JOBS"
-else
-    cmake --build "$SDK_BUILD" --target rexglue
+REXGLUE="$SDK_INSTALL/bin/rexglue"
+[ -x "$REXGLUE" ] || REXGLUE="$SDK/out/build/linux-amd64/RelWithDebInfo/rexgluerd"
+[ -x "$REXGLUE" ] || REXGLUE="$SDK/out/build/linux-amd64/RelWithDebInfo/rexglue"
+[ -x "$REXGLUE" ] || REXGLUE="$SDK/out/linux-amd64/RelWithDebInfo/rexgluerd"
+[ -x "$REXGLUE" ] || REXGLUE="$SDK/out/linux-amd64/RelWithDebInfo/rexglue"
+[ -x "$REXGLUE" ] || REXGLUE="$SDK/out/linux-amd64/rexglue"
+if [ ! -x "$REXGLUE" ]; then
+    echo "==> ReXGlue SDK is not built/installed; building it now"
+    if [ -n "$JOBS" ]; then
+        "$PORT_DIR/build_sdk.sh" -j "$JOBS"
+    else
+        "$PORT_DIR/build_sdk.sh"
+    fi
+    REXGLUE="$SDK_INSTALL/bin/rexglue"
+    [ -x "$REXGLUE" ] || REXGLUE="$SDK/out/build/linux-amd64/RelWithDebInfo/rexglue"
 fi
-
-REXGLUE="$SDK/out/linux-amd64/rexglue"
-[ -x "$REXGLUE" ] || REXGLUE="$SDK_BUILD/rexglue"
 [ -x "$REXGLUE" ] || die "could not locate the built rexglue binary"
 
 echo "==> Running codegen (this takes ~12 minutes)"

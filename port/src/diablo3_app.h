@@ -34,7 +34,7 @@ class Diablo3App : public rex::ReXApp {
   void OnPreSetup(rex::RuntimeConfig& config) override { config.gpu_plugin = "xenos"; }
 
   // Boot the disc's own executable by its exact name.
-  void OnLoadXexImage(std::string& xex_image) override { xex_image = "game:\\Default.xex"; }
+  void OnLoadXexImage(std::string& xex_image) override { xex_image = "game:\\default.xex"; }
 
   // FATX cache device setup.
   // Diablo mounts cache:\ as a FATX volume by reading \Device\Harddisk0\Partition0

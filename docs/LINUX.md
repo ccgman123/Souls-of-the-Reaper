@@ -1,9 +1,9 @@
 # Native Linux build
 
-The port targets ReXGlue 0.8.1-dev, whose Linux path uses the **Vulkan** GPU
+The port targets ReXGlue 0.10.0, whose Linux path uses the **Vulkan** GPU
 backend (D3D12 is Windows-only). The build system, generated game code, kernel
-hooks, cache device and SDL input patches are cross-platform; this document
-covers what is already wired up and what still needs work.
+hooks, cache device, SDL input and System Link patches are cross-platform; this
+document covers what is already wired up and what still needs work.
 
 ## Status
 
@@ -13,8 +13,8 @@ covers what is already wired up and what still needs work.
 | SDK patch application | works on the pinned SDK commit |
 | Generated-code hand patches | ported to `port/apply_generated_patches.py` |
 | Config writer | ported to `apply_config.py` |
-| Build/codegen scripts | `port/build.sh`, `port/codegen.sh` |
-| Window / input / audio | upstream GTK3 + SDL3 (vendored) |
+| Build/codegen scripts | `port/build_sdk.sh`, `port/build.sh`, `port/codegen.sh` |
+| Window / input / audio | SDL3 (vendored), including borderless windows and HIDAPI controllers |
 | Rendering | Vulkan host-RT hooks ported; full build and runtime verified on Intel Arc (Mesa) — see "Rendering" below |
 
 All 24 shared translation units touched by the port patch and all 9 Vulkan
@@ -54,29 +54,31 @@ nix develop
 
 The SDK vendors SDL3, volk/Vulkan-Headers, VulkanMemoryAllocator, SPIRV-Tools,
 glslang, FFmpeg and the other third-party libraries. Clone it next to this
-repository (or set `REXSDK_DIR`):
+repository (or set `REXSDK_DIR`), at the commit in
+`port/rexglue.lock.json`:
 
 ```sh
 git clone https://github.com/rexglue/rexglue-sdk.git
 cd rexglue-sdk
-git checkout f22cd9dc360dda5700358f7452230af24c2c2e69   # pinned by the port
+git checkout c94f5ebdcb3c9d1a460ca48e04f9758448f8d518   # ReXGlue 0.10.0
 git submodule update --init --recursive
 ```
 
-`port/build.sh` and `port/codegen.sh` apply the SDK patches automatically via
-`port/apply_sdk_patches.sh` (idempotently):
+`port/build_sdk.sh` configures, builds, and installs the SDK; `port/codegen.sh`
+and `port/build.sh` use that installation. The scripts apply the SDK patches
+automatically via `port/apply_sdk_patches.sh` (idempotently):
 
+- `patches/rexglue-registration.patch`, `rexglue-object-reference.patch`,
+  `rexglue-keyboard.patch`, and `rexglue-username.patch` — the ReXGlue 0.10
+  codegen/kernel/input/player-name changes.
+- `patches/rexglue-systemlink-net.patch` and `patches/systemlink/` — System Link
+  (LAN play) sockets and XNet hooks.
 - `patches/rexglue-sdk.patch` — the Windows/D3D12 port patch.
-- `patches/rexglue-sdk-linux.patch` — the consolidated Linux delta: shared
-  `input/slot_arbiter.h`, non-D3D12 `RtLogActive()` stub, Snappy build fix for
-  `-march=x86-64-v3`, texture-fetch exponent fix, Vulkan host-render-target
-  resolve hooks (mode 4 forced color source, mode 5 depth ownership map,
-  mode 8 cross-map clear inheritance), borderless GTK window support, SDL
-  HIDAPI/udev controller enumeration and gamepad polling, and the unit-test
-  harness fixes.
-- `patches/rexglue-sdk-common.patch` and `patches/rexglue-sdk-vulkan.patch` —
-  empty compatibility stubs; their contents are folded into
-  `rexglue-sdk-linux.patch` and `apply_sdk_patches.sh` skips them.
+- `patches/rexglue-sdk-linux.patch` — the Linux delta: Vulkan host-render-target
+  resolve hooks (mode 4 forced color source, mode 5 depth ownership map, mode 8
+  cross-map clear inheritance), the texture-fetch `exp_adjust` fix, SDL
+  borderless windows, SDL HIDAPI/udev controller enumeration and polling,
+  cvar/shared-memory teardown fixes, and the unit-test harness fixes.
 
 ## Game data
 
@@ -133,24 +135,31 @@ command-line extraction command. On a distribution build install `python3-tk`
 ## Build
 
 ```sh
-# 1. Transcode the guest executable (one time per XEX, ~12 min)
+# 1. Build and install the pinned ReXGlue 0.10 SDK
+./port/build_sdk.sh
+
+# 2. Transcode the guest executable (one time per XEX, ~1 min)
 ./port/codegen.sh
 
-# 2. Build the native ELF
+# 3. Build the native ELF
 ./port/build.sh -c RelWithDebInfo
 
 # Output: port/out/build/linux-amd64-relwithdebinfo/diablo3
 ```
 
-`codegen.sh` builds the SDK's `rexglue` tool, runs codegen, then re-applies the
+`build_sdk.sh` configures, builds, and installs the SDK under
+`rexglue-sdk/out/install/linux-amd64`. `codegen.sh` uses the installed SDK (or
+builds it first if needed), runs v0.10 codegen, then re-applies the
 setjmp/longjmp and main-menu-exit fixes that codegen cannot emit. Re-run
 `python3 port/apply_generated_patches.py` after every codegen pass.
 
 Useful options:
 
 ```sh
+./port/build_sdk.sh --clean       # rebuild/install the SDK from scratch
 ./port/build.sh -c Debug          # debug runtime
 ./port/build.sh --clean           # wipe the port build directory
+REXSDK_DIR=/path/to/sdk ./port/build_sdk.sh
 REXSDK_DIR=/path/to/sdk ./port/build.sh
 python3 port/apply_generated_patches.py --generated-dir port/generated/default
 ```
@@ -225,6 +234,31 @@ lsusb | grep 28de
 getfacl /dev/hidraw*
 ```
 
+### System Link (LAN)
+
+The v0.10 SDK integration includes the game's native System Link mode, so two
+or more Linux PCs on the same LAN can see each other in the in-game menu.
+
+- Give every PC except one a unique player number in `diablo3.toml`:
+  ```toml
+  systemlink_instance = 1
+  ```
+  Use `2`, `3`, ... on additional PCs. `0` is the classic/default ID.
+- Set a player name through the environment when launching:
+  ```sh
+  SOTR_USERNAME="Player" ./launch-diablo3.sh
+  ```
+- On a machine with multiple adapters, select the LAN address:
+  ```toml
+  systemlink_address = "192.168.1.20"
+  ```
+- Add `systemlink_trace = true` to log discovery/session traffic when debugging
+  connectivity.
+
+The implementation lives in `patches/systemlink/` and
+`patches/rexglue-systemlink-net.patch`; the player name is supplied by
+`patches/rexglue-username.patch`.
+
 ## Configuration
 
 The runtime reads `<exe dir>/diablo3.toml`. `apply_config.py` writes the
@@ -298,7 +332,8 @@ backends:
 - The D3D12-only diagnostic logger (`d3d_screenshot.cpp`, RTLOG) is not built;
   `patches/rexglue-sdk-linux.patch` supplies a no-op `RtLogActive()`.
 - `patches/rexglue-sdk-common.patch` and `patches/rexglue-sdk-vulkan.patch` are
-  retained as empty compatibility stubs and skipped by `apply_sdk_patches.sh`.
+  retained only as empty historical compatibility stubs; the v0.10 patch flow
+  no longer references them.
 
 Verified on the Linux desktop with an Intel Arc B390 (Mesa 26.1.8): native
 2560x1440 at 60 FPS, readable UI, visible world and lighting, audio
