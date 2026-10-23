@@ -75,6 +75,10 @@ port/rdc_play.ps1
 *.7z
 FABLE_AQUI.md
 
+# Python bytecode from the Linux helper scripts
+__pycache__/
+*.pyc
+
 # Local-only files
 reference/
 .claude/

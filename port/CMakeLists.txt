@@ -34,3 +34,14 @@ foreach(_dep rexcore imgui)
             $<TARGET_PROPERTY:${_dep},INTERFACE_INCLUDE_DIRECTORIES>)
     endif()
 endforeach()
+
+# The SDK sets $ORIGIN on the host's runpath but only stages runtime DLLs on
+# Windows. On Linux, copy the shared runtime next to the executable so the
+# built tree runs without LD_LIBRARY_PATH.
+if(UNIX AND NOT APPLE AND TARGET rexruntime)
+    add_custom_command(TARGET diablo3 POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            $<TARGET_FILE:rexruntime>
+            $<TARGET_FILE_DIR:diablo3>
+        VERBATIM)
+endif()

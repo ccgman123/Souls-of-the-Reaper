@@ -30,6 +30,7 @@ Download the latest release from the [Releases](../../releases) page, extract th
 **1. Apply SDK patches**
 ```powershell
 git -C rexglue-sdk apply ..\patches\rexglue-sdk.patch
+git -C rexglue-sdk apply ..\patches\rexglue-sdk-common.patch
 Copy-Item patches\d3d_screenshot.cpp rexglue-sdk\src\graphics\d3d12\
 ```
 
@@ -68,6 +69,36 @@ Copy-Item launcher\dist\SoulsOfTheReaper.exe . -Force
 ```
 SoulsOfTheReaper.exe
 ```
+
+---
+
+## Option C — Linux (experimental)
+
+The ReXGlue SDK builds natively on Linux with the Vulkan backend. This repo now
+ships Linux build/codegen scripts and Python equivalents of the PowerShell
+patchers:
+
+```sh
+git clone https://github.com/rexglue/rexglue-sdk.git
+git -C rexglue-sdk checkout f22cd9dc360dda5700358f7452230af24c2c2e69
+git -C rexglue-sdk submodule update --init --recursive
+
+python3 port/extract_iso.py "/path/to/Diablo III ... (USA).iso"
+./port/codegen.sh                 # transcode game/default.xex (~12 min)
+./port/build.sh -c RelWithDebInfo # -> port/out/build/linux-amd64-relwithdebinfo/diablo3
+python3 apply_config.py --game-data-root "$PWD/game"
+```
+
+The scripts apply the pinned Windows/D3D12 port patch and
+`patches/rexglue-sdk-linux.patch`, the consolidated Linux delta (shared input
+slot arbiter, non-D3D12 `RtLogActive()` stub, Vulkan host-render-target resolve
+hooks, the texture-fetch exponent fix, and the borderless GTK window). The
+`rexglue-sdk-common.patch` and `rexglue-sdk-vulkan.patch` files are empty
+compatibility stubs. The game logic, kernel hooks and input patches are portable.
+The Vulkan rendering port is verified end-to-end with real game data on a Linux
+desktop (Intel Arc B390 / Mesa): native 1440p at 60 FPS with correct UI,
+lighting and audio. Other GPUs and drivers may still need per-vendor tuning.
+See [docs/LINUX.md](docs/LINUX.md) for prerequisites, status and known gaps.
 
 ---
 
