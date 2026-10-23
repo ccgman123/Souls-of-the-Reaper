@@ -24,6 +24,30 @@ index 43ef7a2..f56711e 100644
  
    bool gamma_render_target_as_unorm16_ = false;
  
+diff --git a/include/rex/input/sdl/sdl_input_driver.h b/include/rex/input/sdl/sdl_input_driver.h
+index 085e5bc..2d09a39 100644
+--- a/include/rex/input/sdl/sdl_input_driver.h
++++ b/include/rex/input/sdl/sdl_input_driver.h
+@@ -76,6 +76,11 @@ class SDLInputDriver final : public InputDriver, public rex::ui::WindowListener
+   std::unique_lock<std::mutex> DrainAndLock();
+   void ProcessEventLocked(const SDL_Event& event);
+   void OnControllerDeviceAddedLocked(const SDL_Event& event);
++  // Some controllers (notably Steam Input's virtual Xbox pad) are present before
++  // or without a GAMEPAD_ADDED event. Poll the gamepad list as a fallback.
++  void SyncControllersLocked();
++  bool IsControllerKnownLocked(SDL_JoystickID instance_id) const;
++  void AddControllerLocked(SDL_JoystickID instance_id);
+   void OnControllerDeviceRemovedLocked(const SDL_Event& event);
+   void OnControllerDeviceAxisMotionLocked(const SDL_Event& event);
+   void OnControllerDeviceButtonChangedLocked(const SDL_Event& event);
+@@ -97,6 +102,7 @@ class SDLInputDriver final : public InputDriver, public rex::ui::WindowListener
+   bool SDL_Gamepad_initialized_;
+   std::atomic<int> sdl_events_unflushed_;
+   std::atomic<bool> sdl_pumpevents_queued_;
++  uint64_t next_controller_sync_ms_ = 0;
+   std::array<ControllerState, HID_SDL_USER_COUNT> controllers_;
+   // [s37] Physical controllers that are connected but haven't pressed a button yet,
+   // so they haven't claimed a xam user_index slot.
 diff --git a/include/rex/input/slot_arbiter.h b/include/rex/input/slot_arbiter.h
 new file mode 100644
 index 0000000..6b9aa23
@@ -398,6 +422,83 @@ index 05d1e5c..947732a 100644
    if (dump_rectangles_.empty()) {
      return true;
    }
+diff --git a/src/input/sdl/sdl_input_driver.cpp b/src/input/sdl/sdl_input_driver.cpp
+index 29a0b06..401e09c 100644
+--- a/src/input/sdl/sdl_input_driver.cpp
++++ b/src/input/sdl/sdl_input_driver.cpp
+@@ -415,6 +415,10 @@ std::unique_lock<std::mutex> SDLInputDriver::DrainAndLock() {
+   for (const auto& event : events) {
+     ProcessEventLocked(event);
+   }
++  // Pads that already existed when SDL initialized, or that Steam Input creates
++  // without a GAMEPAD_ADDED event, are found here. Throttled to avoid calling
++  // into SDL on every input poll.
++  SyncControllersLocked();
+   return guard;
+ }
+ 
+@@ -439,10 +443,31 @@ void SDLInputDriver::ProcessEventLocked(const SDL_Event& event) {
+ }
+ 
+ void SDLInputDriver::OnControllerDeviceAddedLocked(const SDL_Event& event) {
+-  // Open the controller.
+-  const auto controller = SDL_OpenGamepad(event.cdevice.which);
++  AddControllerLocked(event.cdevice.which);
++}
++
++bool SDLInputDriver::IsControllerKnownLocked(SDL_JoystickID instance_id) const {
++  for (const auto& controller : controllers_) {
++    if (controller.sdl &&
++        SDL_GetJoystickID(SDL_GetGamepadJoystick(controller.sdl)) == instance_id) {
++      return true;
++    }
++  }
++  for (SDL_Gamepad* controller : unbound_controllers_) {
++    if (SDL_GetJoystickID(SDL_GetGamepadJoystick(controller)) == instance_id) {
++      return true;
++    }
++  }
++  return false;
++}
++
++void SDLInputDriver::AddControllerLocked(SDL_JoystickID instance_id) {
++  if (IsControllerKnownLocked(instance_id)) {
++    return;
++  }
++  SDL_Gamepad* controller = SDL_OpenGamepad(instance_id);
+   if (!controller) {
+-    assert_always();
++    REXLOG_WARN("SDL: Failed to open gamepad {}: {}", instance_id, SDL_GetError());
+     return;
+   }
+   REXLOG_INFO(
+@@ -463,6 +488,26 @@ void SDLInputDriver::OnControllerDeviceAddedLocked(const SDL_Event& event) {
+   REXLOG_INFO("SDL OnControllerDeviceAdded: connected, awaiting first input to claim a slot.");
+ }
+ 
++void SDLInputDriver::SyncControllersLocked() {
++  if (!SDL_Gamepad_initialized_) {
++    return;
++  }
++  const uint64_t now_ms = SDL_GetTicks();
++  if (now_ms < next_controller_sync_ms_) {
++    return;
++  }
++  next_controller_sync_ms_ = now_ms + 250;
++  int gamepad_count = 0;
++  SDL_JoystickID* gamepad_ids = SDL_GetGamepads(&gamepad_count);
++  if (!gamepad_ids) {
++    return;
++  }
++  for (int i = 0; i < gamepad_count; ++i) {
++    AddControllerLocked(gamepad_ids[i]);
++  }
++  SDL_free(gamepad_ids);
++}
++
+ SDL_Gamepad* SDLInputDriver::TakePendingControllerLocked(SDL_JoystickID instance_id) {
+   for (auto it = unbound_controllers_.begin(); it != unbound_controllers_.end(); ++it) {
+     if (SDL_GetJoystickID(SDL_GetGamepadJoystick(*it)) == instance_id) {
 diff --git a/src/ui/rex_app.cpp b/src/ui/rex_app.cpp
 index e1268f9..a266e38 100644
 --- a/src/ui/rex_app.cpp

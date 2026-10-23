@@ -8,7 +8,7 @@
 # Requirements (Debian/Ubuntu names):
 #   clang/clang++ >= 18, lld, cmake >= 3.25, ninja-build, git,
 #   pkg-config, libgtk-3-dev, libx11-xcb-dev, libvulkan-dev,
-#   libasound2-dev, libpulse-dev
+#   libasound2-dev, libpulse-dev, libudev-dev, libglvnd-dev
 # The SDK vendors SDL3, Vulkan headers/loader glue (volk), FFmpeg, glslang and
 # friends, so those are not system packages.
 #

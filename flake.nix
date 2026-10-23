@@ -39,6 +39,14 @@
             vulkan-loader
             vulkan-headers
 
+            # OpenGL/GLX dispatch used by GTK when launched from Steam
+            libglvnd
+            mesa
+
+            # SDL3 uses libudev to enumerate Linux input/HID devices,
+            # including the Steam Controller and Steam Input virtual pads.
+            udev
+
             # SDL3 audio backends enabled by the SDK
             alsa-lib
             libpulseaudio
@@ -50,7 +58,7 @@
             export CXX=clang++
             # These libraries are dlopen()ed by the Vulkan loader/SDL3 rather
             # than linked, so put them on the loader search path.
-            export LD_LIBRARY_PATH="${pkgs.vulkan-loader}/lib:${pkgs.alsa-lib}/lib:${pkgs.libpulseaudio}/lib:${pkgs.pipewire}/lib:''${LD_LIBRARY_PATH:-}"
+            export LD_LIBRARY_PATH="${pkgs.vulkan-loader}/lib:${pkgs.libglvnd}/lib:${pkgs.mesa}/lib:${pkgs.alsa-lib}/lib:${pkgs.libpulseaudio}/lib:${pkgs.pipewire}/lib:${pkgs.udev}/lib:''${LD_LIBRARY_PATH:-}"
             echo "Souls of the Reaper - Linux dev shell"
             echo "  ./port/codegen.sh    # transcode game/default.xex (needs game data)"
             echo "  ./port/build.sh      # build port/out/build/linux-amd64-relwithdebinfo/diablo3"

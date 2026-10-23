@@ -33,7 +33,8 @@ Debian/Ubuntu:
 ```sh
 sudo apt install build-essential git cmake ninja-build clang lld \
   pkg-config libgtk-3-dev libx11-xcb-dev libvulkan-dev \
-  libasound2-dev libpulse-dev libpipewire-0.3-dev
+  libasound2-dev libpulse-dev libpipewire-0.3-dev libudev-dev \
+  libglvnd-dev
 ```
 
 Fedora:
@@ -41,7 +42,8 @@ Fedora:
 ```sh
 sudo dnf install git cmake ninja-build clang lld \
   pkgconf-pkg-config gtk3-devel libX11-devel libxcb-devel \
-  vulkan-loader-devel alsa-lib-devel pulseaudio-libs-devel pipewire-devel
+  vulkan-loader-devel alsa-lib-devel pulseaudio-libs-devel pipewire-devel \
+  systemd-devel libglvnd-devel
 ```
 
 Or use the provided dev shell:
@@ -69,8 +71,9 @@ git submodule update --init --recursive
   `input/slot_arbiter.h`, non-D3D12 `RtLogActive()` stub, Snappy build fix for
   `-march=x86-64-v3`, texture-fetch exponent fix, Vulkan host-render-target
   resolve hooks (mode 4 forced color source, mode 5 depth ownership map,
-  mode 8 cross-map clear inheritance), borderless GTK window support, and the
-  unit-test harness fixes.
+  mode 8 cross-map clear inheritance), borderless GTK window support, SDL
+  HIDAPI/udev controller enumeration and gamepad polling, and the unit-test
+  harness fixes.
 - `patches/rexglue-sdk-common.patch` and `patches/rexglue-sdk-vulkan.patch` —
   empty compatibility stubs; their contents are folded into
   `rexglue-sdk-linux.patch` and `apply_sdk_patches.sh` skips them.
@@ -161,6 +164,41 @@ python3 apply_config.py --game-data-root "$PWD/game"
 The desktop entry `Souls-of-the-Reaper.desktop` calls the same wrapper; its
 paths are machine-specific and can be edited.
 
+### Steam and controllers
+
+To launch through Steam, add `launch-diablo3.sh` itself as the non-Steam game
+(not the `.desktop` file). The launcher clears Steam's `LD_PRELOAD` overlay
+hook, because the overlay is built against the Steam runtime and can otherwise
+pull in a `libGL.so.1` that the Nix-linked build cannot resolve. Steam Input
+still works with the overlay disabled.
+
+The Steam Controller 2's physical USB device (`28de:1302`) is read directly by
+SDL's HIDAPI and appears as a normal gamepad once SDL can enumerate Linux HID
+devices. Steam is **not required** for this: the port opens the physical
+controller through `hidraw`, and the kernel `hid-steam` driver does not need to
+claim `1302`. If Steam is running, Steam Input may additionally create a
+virtual Xbox pad (`28de:11ff`, usually `/dev/input/js0`); the port handles
+either device. The port also polls `SDL_GetGamepads()` in addition to handling
+hotplug events, so a controller that already existed when the game started is
+still opened.
+
+Steam stores controller configurations per Steam AppID on the PC
+(`~/.local/share/Steam/controller_base` and `userdata/.../controller_config`);
+the controller itself does not remember a per-game profile. Launching the
+wrapper outside Steam gets the controller's own/default mapping, not a Steam
+game profile. A userspace bridge such as `sc-controller` is only needed if you
+want a virtual pad on a setup where SDL cannot access the controller directly.
+
+SDL's HIDAPI uses `libudev` to enumerate Linux input and `hidraw` devices. The
+Nix dev shell includes it; on a distribution build install `libudev-dev`
+(Debian/Ubuntu) or `systemd-devel` (Fedora). If the controller is not detected,
+check that the device exists and that your user can read it:
+
+```sh
+lsusb | grep 28de
+getfacl /dev/hidraw*
+```
+
 ## Configuration
 
 The runtime reads `<exe dir>/diablo3.toml`. `apply_config.py` writes the
@@ -250,4 +288,6 @@ drivers may still need per-vendor tuning.
   on Windows; the Python versions are drop-in equivalents.
 - The Windows exe icon patch is cosmetic and skipped on Linux.
 - Controllers use the SDK's patched SDL3 input driver (up to 4 gamepads).
-  Keyboard/mouse bindings are the same.
+  The driver polls `SDL_GetGamepads()` as well as handling hotplug events, so
+  a Steam Controller or Steam Input virtual pad that predates the game is
+  still found. Keyboard/mouse bindings are the same.

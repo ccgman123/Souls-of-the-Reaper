@@ -49,17 +49,20 @@ if [ "$binary_uses_nix" = 1 ]; then
     needs_env=1
   else
     # If Nix garbage collection removed the dev-shell libraries, rebuild the
-    # cache. The Vulkan loader is the canary because the game fails early
-    # without it.
+    # cache. Check the libraries that are dlopen()ed at startup: Vulkan, GTK's
+    # GLX probe (libGL), and SDL's udev/HIDAPI enumeration (libudev).
     IFS=':' read -r -a cached_dirs < "$ENV_CACHE"
     vulkan_found=0
+    libgl_found=0
+    libudev_found=0
     for dir in "${cached_dirs[@]}"; do
-      if [ -n "$dir" ] && [ -e "$dir/libvulkan.so.1" ]; then
-        vulkan_found=1
-        break
+      if [ -n "$dir" ]; then
+        [ -e "$dir/libvulkan.so.1" ] && vulkan_found=1
+        [ -e "$dir/libGL.so.1" ] && libgl_found=1
+        [ -e "$dir/libudev.so.1" ] && libudev_found=1
       fi
     done
-    if [ "$vulkan_found" = 0 ]; then
+    if [ "$vulkan_found" = 0 ] || [ "$libgl_found" = 0 ] || [ "$libudev_found" = 0 ]; then
       needs_env=1
     fi
   fi
@@ -86,6 +89,12 @@ else
   # Preserve any LD_LIBRARY_PATH the caller intentionally set.
   :
 fi
+
+# Steam preloads gameoverlayrenderer.so into every game. The overlay is built
+# against the Steam runtime and pulls in libGL, which a Nix-linked build does
+# not expose; the game then dies before its first frame. The overlay is not
+# needed for input, so drop Steam's preload and keep the game's own runtime.
+unset LD_PRELOAD
 
 export DISPLAY="${DISPLAY:-:0}"
 export SDL_VIDEODRIVER="${SDL_VIDEODRIVER:-x11}"
