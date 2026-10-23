@@ -134,13 +134,29 @@ Use the wrapper rather than starting the ELF directly:
 ./launch-diablo3.sh
 ```
 
-The binary needs the Nix dev-shell Vulkan/ALSA/Pulse/PipeWire libraries at
-runtime. The launcher caches the resulting `LD_LIBRARY_PATH` in
-`~/.local/share/diablo3/ld_library_path` and starts the game directly on later
-runs, avoiding `nix develop` on every launch (about 20-30 s saved). The first
-launch, a launch after `flake.nix`/`flake.lock` changes, or a launch after Nix
-garbage collection removed the libraries rebuilds the cache once. Logs go to
-`~/.local/share/diablo3/diablo3.log`.
+A binary built inside the Nix dev shell needs the Nix store Vulkan/ALSA/Pulse/
+PipeWire libraries at runtime. The launcher caches the resulting
+`LD_LIBRARY_PATH` in `~/.local/share/diablo3/ld_library_path` and starts the
+game directly on later runs, avoiding `nix develop` on every launch (about
+20-30 s saved). The first launch, a launch after `flake.nix`/`flake.lock`
+changes, or a launch after Nix garbage collection removed the libraries
+rebuilds the cache once. Logs go to `~/.local/share/diablo3/diablo3.log`.
+
+A binary built against distribution packages (the normal `port/build.sh` flow
+with the distro packages above) does **not** need Nix. The launcher detects
+that and runs the binary directly with the system Vulkan/ALSA/Pulse paths. The
+prebuilt `port/out/.../diablo3` from a Nix build is **not portable** to a
+non-NixOS machine - rebuild on the target distribution, or install Nix there.
+On Wayland desktops the port still uses XWayland (see "Wayland" in the plan);
+native Wayland is not implemented yet.
+
+```sh
+# Distribution build on a non-NixOS system:
+./port/codegen.sh
+./port/build.sh -c RelWithDebInfo
+python3 apply_config.py --game-data-root "$PWD/game"
+./launch-diablo3.sh
+```
 
 The desktop entry `Souls-of-the-Reaper.desktop` calls the same wrapper; its
 paths are machine-specific and can be edited.

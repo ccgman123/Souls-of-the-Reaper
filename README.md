@@ -90,6 +90,12 @@ python3 apply_config.py --game-data-root "$PWD/game"
 ./launch-diablo3.sh                # first run caches the runtime env (~20 s), then ~2 s
 ```
 
+On non-NixOS systems, install the distro packages listed in
+[docs/LINUX.md](docs/LINUX.md): `port/build.sh` uses the system toolchain and
+`launch-diablo3.sh` runs a distro-built binary directly without Nix. A binary
+built inside Nix is tied to `/nix/store` and is not portable to a machine
+without Nix — rebuild on the target, or install Nix there too.
+
 The scripts apply the pinned Windows/D3D12 port patch and
 `patches/rexglue-sdk-linux.patch`, the consolidated Linux delta (shared input
 slot arbiter, non-D3D12 `RtLogActive()` stub, Vulkan host-render-target resolve
