@@ -126,6 +126,25 @@ REXSDK_DIR=/path/to/sdk ./port/build.sh
 python3 port/apply_generated_patches.py --generated-dir port/generated/default
 ```
 
+## Launch
+
+Use the wrapper rather than starting the ELF directly:
+
+```sh
+./launch-diablo3.sh
+```
+
+The binary needs the Nix dev-shell Vulkan/ALSA/Pulse/PipeWire libraries at
+runtime. The launcher caches the resulting `LD_LIBRARY_PATH` in
+`~/.local/share/diablo3/ld_library_path` and starts the game directly on later
+runs, avoiding `nix develop` on every launch (about 20-30 s saved). The first
+launch, a launch after `flake.nix`/`flake.lock` changes, or a launch after Nix
+garbage collection removed the libraries rebuilds the cache once. Logs go to
+`~/.local/share/diablo3/diablo3.log`.
+
+The desktop entry `Souls-of-the-Reaper.desktop` calls the same wrapper; its
+paths are machine-specific and can be edited.
+
 ## Configuration
 
 The runtime reads `<exe dir>/diablo3.toml`. `apply_config.py` writes the

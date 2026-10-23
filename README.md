@@ -87,6 +87,7 @@ python3 port/extract_iso.py "/path/to/Diablo III ... (USA).iso"
 ./port/codegen.sh                 # transcode game/default.xex (~12 min)
 ./port/build.sh -c RelWithDebInfo # -> port/out/build/linux-amd64-relwithdebinfo/diablo3
 python3 apply_config.py --game-data-root "$PWD/game"
+./launch-diablo3.sh                # first run caches the runtime env (~20 s), then ~2 s
 ```
 
 The scripts apply the pinned Windows/D3D12 port patch and
