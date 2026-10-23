@@ -28,6 +28,7 @@ rexglue-username.patch
 rexglue-systemlink-net.patch
 rexglue-sdk.patch
 rexglue-sdk-linux.patch
+rexglue-dynamic-resolution.patch
 "
 
 [ -d "$SDK" ] || { echo "ERROR: SDK not found at $SDK" >&2; exit 1; }

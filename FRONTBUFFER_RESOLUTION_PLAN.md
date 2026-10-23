@@ -95,6 +95,40 @@ Performance on the current Intel Arc B390 / Mesa setup:
 
 The tradeoff is GPU cost, not a correctness issue.
 
+### 6. Dynamic draw-resolution scaling
+
+`patches/rexglue-dynamic-resolution.patch` makes the draw resolution scale
+adjustable at runtime. Because the scale is baked into texture allocation,
+render-target sizes, and translated shaders, a change recreates the texture,
+render-target, and pipeline caches after the current presentation submission
+has completed.
+
+Configuration:
+
+```toml
+d3_dynamic_resolution = true
+d3_dynamic_resolution_target_fps = 60
+d3_dynamic_resolution_min_scale = 1
+draw_resolution_scale_x = 2
+draw_resolution_scale_y = 2
+```
+
+The controller starts at the configured maximum, measures swap work excluding
+the frame-limiter sleep, and downscales when the work exceeds the target frame
+budget. It only upscales when the projected cost of the next scale fits, which
+avoids the 720p/105 FPS ↔ 1440p/34 FPS oscillation. Verified transitions:
+
+```text
+[D3 dynamic resolution] scale 2x -> 1x requested
+[D3 dynamic resolution] scale 1x active
+[D3 dynamic resolution] scale 1x -> 2x requested
+[D3 dynamic resolution] scale 2x active
+```
+
+On the Intel Arc B390 with a 60 FPS target, the controller settles at scale 1.
+With a 30 FPS target it can keep scale 2. Transitions work in both directions;
+the only cost is a brief cache-recreation hitch.
+
 ## The two paths
 
 ### Path A — presentation upscaling / compositing
@@ -205,8 +239,12 @@ For each attempted path:
 
 ## Key files
 
+- `patches/rexglue-dynamic-resolution.patch`
+  - runtime scale controller and cache recreation
+- `apply_config.py`
+  - `--dynamic-resolution`, `--dynamic-target-fps`, `--dynamic-min-scale`
 - `rexglue-sdk/src/graphics/vulkan/command_processor.cpp`
-  - `IssueSwap`, `RefreshGuestOutput`, swap gamma/FXAA dispatch
+  - `IssueSwap`, `RefreshGuestOutput`, swap gamma/FXAA dispatch, dynamic scale controller
 - `rexglue-sdk/src/graphics/vulkan/texture_cache.cpp`
   - `RequestSwapTexture`
 - `rexglue-sdk/src/graphics/shaders/vulkan_spirv/apply_gamma_*`
@@ -232,6 +270,8 @@ The measurement changed the recommendation:
   - No front-buffer override is needed.
   - It produces a 2560×1440 swap source and sharp UI/HUD.
   - Cost: about 33 FPS on the current hardware versus ~60 FPS at scale 1.
+- **Dynamic resolution is now implemented** to choose between those scales for
+  a selected frame-rate budget (60 FPS → 1x on this GPU, 30 FPS → 2x).
 - **Path A1 is only useful for presentation polish** if scale 2 is too slow; it
   cannot add detail beyond the 720p source.
 - **Path A2 is not attractive** because the host targets are EDRAM tiles rather
@@ -248,6 +288,10 @@ python3 apply_config.py --res-scale 2 --resolution 1440p
 
 # 60 FPS presentation, 720p source upscaled to 1440p
 python3 apply_config.py --res-scale 1 --resolution 1440p
+
+# Pick the highest scale that fits 60 FPS (1x on the tested GPU)
+python3 apply_config.py --res-scale 2 --resolution 1440p \
+    --dynamic-resolution true --dynamic-target-fps 60
 ```
 
 The current state is: 1440p swapchain/window, 1440p swap source when

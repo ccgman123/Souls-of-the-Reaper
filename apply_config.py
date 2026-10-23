@@ -82,6 +82,25 @@ def main() -> int:
         "(for example 1920x1080). Omit to keep the existing value.",
     )
     parser.add_argument("--res-scale", type=int, choices=[1, 2, 3], default=1)
+    parser.add_argument(
+        "--dynamic-resolution",
+        type=parse_bool,
+        default="false",
+        help="adapt the draw resolution scale to the target frame rate",
+    )
+    parser.add_argument(
+        "--dynamic-target-fps",
+        type=int,
+        default=None,
+        help="target FPS for dynamic resolution (defaults to --fps, or 60 when --fps is 0)",
+    )
+    parser.add_argument(
+        "--dynamic-min-scale",
+        type=int,
+        choices=[1, 2, 3],
+        default=1,
+        help="lowest draw resolution scale used by dynamic resolution",
+    )
     parser.add_argument("--user-language", type=int, default=1)
     parser.add_argument("--user-country", type=int, default=103)
     parser.add_argument(
@@ -108,11 +127,17 @@ def main() -> int:
     # Run unclipped draw vertex shaders on the CPU for exact EDRAM area.
     managed["execute_unclipped_draw_vs_on_cpu"] = "true"
 
+    dynamic_target_fps = args.dynamic_target_fps
+    if dynamic_target_fps is None:
+        dynamic_target_fps = args.fps if args.fps > 0 else 60
     managed.update(
         {
             "draw_resolution_scale_x": str(args.res_scale),
             "draw_resolution_scale_y": str(args.res_scale),
             "d3_frame_limit": str(args.fps),
+            "d3_dynamic_resolution": args.dynamic_resolution,
+            "d3_dynamic_resolution_target_fps": str(dynamic_target_fps),
+            "d3_dynamic_resolution_min_scale": str(args.dynamic_min_scale),
             "vsync": args.vsync,
             "mnk_mode": args.mnk_mode,
             "mnk_mouse": args.mnk_mouse,
@@ -158,7 +183,8 @@ def main() -> int:
 
     print(f"Config: {args.fps}fps vsync={args.vsync} present={args.present_effect} "
           f"resolution={args.resolution or 'existing'} borderless={args.borderless} "
-          f"res_scale={args.res_scale}x lang={args.user_language} country={args.user_country}")
+          f"res_scale={args.res_scale}x dynamic={args.dynamic_resolution} "
+          f"target={dynamic_target_fps}fps lang={args.user_language} country={args.user_country}")
     if platform == "windows":
         print(f"D3D12: render={args.rtp} ownership_mode=8 execute_unclipped_draw_vs_on_cpu=true")
     else:

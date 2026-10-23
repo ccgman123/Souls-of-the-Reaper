@@ -84,16 +84,19 @@ built inside Nix is tied to `/nix/store` and is not portable to a machine
 without Nix — rebuild on the target, or install Nix there too.
 
 The scripts apply the pinned ReXGlue 0.10 registration/object-reference/
-keyboard/username/System Link patches, the Windows/D3D12 runtime patch, and
+keyboard/username/System Link patches, the Windows/D3D12 runtime patch,
 `patches/rexglue-sdk-linux.patch`, the Linux delta (Vulkan host-render-target
 resolve hooks, the texture-fetch `exp_adjust` fix, SDL borderless windows,
 SDL HIDAPI/udev controller enumeration and polling, cvar/shared-memory teardown
-fixes, and unit-test harness fixes). The game logic, kernel hooks and input
-patches are portable. The Vulkan rendering port is verified end-to-end with
-real game data on a Linux desktop (Intel Arc B390 / Mesa): native 1440p at
-60 FPS with correct UI, lighting and audio. Other GPUs and drivers may still
-need per-vendor tuning. See [docs/LINUX.md](docs/LINUX.md) for prerequisites,
-status and known gaps.
+fixes, and unit-test harness fixes), and
+`patches/rexglue-dynamic-resolution.patch` (runtime draw-resolution scaling).
+The game logic, kernel hooks and input patches are portable. The Vulkan
+rendering port is verified end-to-end with real game data on a Linux desktop
+(Intel Arc B390 / Mesa): 2560×1440 window, 60 FPS with 720p internal rendering
+upscaled, and true 1440p internal rendering at roughly 33 FPS. Dynamic
+resolution can trade between the two. Other GPUs and drivers may still need
+per-vendor tuning. See [docs/LINUX.md](docs/LINUX.md) for prerequisites, status
+and known gaps.
 
 ---
 

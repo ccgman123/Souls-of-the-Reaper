@@ -306,6 +306,36 @@ python3 apply_config.py --res-scale 2 --resolution 1440p
 python3 apply_config.py --res-scale 1 --resolution 1440p
 ```
 
+#### Dynamic resolution
+
+`--dynamic-resolution true` makes the port choose the highest draw resolution
+scale that fits a frame-time budget instead of using a single fixed scale. It
+starts at the configured `--res-scale`, downscales when rendering work exceeds
+the target, and only scales back up when the projected cost of the next scale
+still fits. The change happens at a swap boundary and recreates the affected
+GPU caches, so expect a brief hitch at each transition.
+
+```sh
+# Prefer 60 FPS: starts at 2x, drops to 1x when 1440p cannot hold 60
+python3 apply_config.py --res-scale 2 --resolution 1440p \
+    --fps 60 --dynamic-resolution true --dynamic-target-fps 60
+
+# Prefer detail: allow 2x at a 30 FPS budget
+python3 apply_config.py --res-scale 2 --resolution 1440p \
+    --fps 60 --dynamic-resolution true --dynamic-target-fps 30
+
+# Unlocked frame rate with dynamic resolution
+python3 apply_config.py --res-scale 2 --resolution 1440p \
+    --fps 0 --dynamic-resolution true --dynamic-target-fps 60
+```
+
+`--dynamic-min-scale` sets the lowest scale the controller may use (default
+`1`). `--dynamic-target-fps` defaults to `--fps` when that is non-zero, or 60
+when `--fps 0`; it is independent of the `d3_frame_limit` cap, so an unlocked
+run can still use a 60 FPS resolution budget. On the tested Intel Arc B390, a
+60 FPS target at 1440p settles at **1x/720p**, while a 30 FPS target keeps
+**2x/1440p**; the transition itself is logged as `[D3 dynamic resolution]`.
+
 Diablo III's 3D viewport is 16:9. A 16:9 mode fills the window correctly. A
 wider mode such as `2560x1080` renders the full-width title art, but the menu
 and gameplay are letterboxed to 16:9 because the game clamps the in-game
