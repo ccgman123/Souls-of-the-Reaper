@@ -19,7 +19,8 @@
             cmake
             ninja
             pkg-config
-            python3
+            # Tkinter is used by the optional graphical ISO installer.
+            (python3.withPackages (ps: [ ps.tkinter ]))
             git
 
             # Linux windowing/display requirements (SDK uses GTK3 + x11-xcb)

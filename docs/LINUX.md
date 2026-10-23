@@ -34,7 +34,7 @@ Debian/Ubuntu:
 sudo apt install build-essential git cmake ninja-build clang lld \
   pkg-config libgtk-3-dev libx11-xcb-dev libvulkan-dev \
   libasound2-dev libpulse-dev libpipewire-0.3-dev libudev-dev \
-  libglvnd-dev
+  libglvnd-dev python3-tk
 ```
 
 Fedora:
@@ -43,7 +43,7 @@ Fedora:
 sudo dnf install git cmake ninja-build clang lld \
   pkgconf-pkg-config gtk3-devel libX11-devel libxcb-devel \
   vulkan-loader-devel alsa-lib-devel pulseaudio-libs-devel pipewire-devel \
-  systemd-devel libglvnd-devel
+  systemd-devel libglvnd-devel python3-tkinter
 ```
 
 Or use the provided dev shell:
@@ -103,6 +103,32 @@ so an interrupted extraction can be resumed.
 `port/diablo3_manifest.toml` points at `../game/default.xex` relative to
 `port/`. Dumps named `Default_decrypted.exe` are accepted and written as
 `game/default.xex`.
+
+### Graphical installer
+
+There is a small Tkinter GUI that wraps the same extractor:
+
+```sh
+./install-diablo3.sh
+```
+
+Choose the ISO/XISO with **Browse…** or type its path directly, choose the game
+data folder (default: `game/` at the repository root), and press **Extract**.
+The window shows the extractor's progress and log; **Cancel** stops the child
+process, and **Copy next steps** puts the codegen/build/config commands on the
+clipboard.
+
+The helper supports:
+
+```sh
+./install-diablo3.sh --iso "/path/to/disc.iso" --out "$PWD/game"
+./install-diablo3.sh --force       # re-extract existing files
+```
+
+The wrapper uses the host Python if Tkinter is available. Otherwise it falls
+back to the Nix dev shell (which includes Tkinter), or prints the equivalent
+command-line extraction command. On a distribution build install `python3-tk`
+(Debian/Ubuntu) or `python3-tkinter` (Fedora).
 
 ## Build
 

@@ -84,6 +84,8 @@ git -C rexglue-sdk checkout f22cd9dc360dda5700358f7452230af24c2c2e69
 git -C rexglue-sdk submodule update --init --recursive
 
 python3 port/extract_iso.py "/path/to/Diablo III ... (USA).iso"
+# or use the graphical installer:
+./install-diablo3.sh
 ./port/codegen.sh                 # transcode game/default.xex (~12 min)
 ./port/build.sh -c RelWithDebInfo # -> port/out/build/linux-amd64-relwithdebinfo/diablo3
 python3 apply_config.py --game-data-root "$PWD/game"
