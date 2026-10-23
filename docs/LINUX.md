@@ -287,9 +287,12 @@ python3 apply_config.py --resolution 2560x1440
 ```
 
 Accepted values are `720p`, `1080p`, `1440p`, `1800p`, `2160p`/`4k`, and
-arbitrary `WIDTHxHEIGHT` strings. This is a native video-mode change, not just
-a window upscale. `draw_resolution_scale_x/y` (or `--res-scale`) remains a
-separate internal supersampling control.
+arbitrary `WIDTHxHEIGHT` strings. This changes the guest video mode and the
+window/swapchain size. The game's final guest swap/front buffer is still
+**1280×720**, so the presenter upscales that image to the configured window;
+`resolution` alone does not raise the fixed front buffer. `draw_resolution_scale_x/y`
+(or `--res-scale`) remains a separate internal 3D supersampling control, but it
+does not change the 2D UI/front-buffer resolution.
 
 Diablo III's 3D viewport is 16:9. A 16:9 mode fills the window correctly. A
 wider mode such as `2560x1080` renders the full-width title art, but the menu

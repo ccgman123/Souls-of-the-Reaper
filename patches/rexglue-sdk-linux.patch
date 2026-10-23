@@ -474,20 +474,34 @@ index b4e045f..3e37444 100644
                       "Monitor index to display on (0 = default, 1 = primary, 2 = "
                       "second monitor, etc.)")
 diff --git a/src/ui/window_sdl.cpp b/src/ui/window_sdl.cpp
-index 2251429..0c026a3 100644
+index 2251429..5eeea32 100644
 --- a/src/ui/window_sdl.cpp
 +++ b/src/ui/window_sdl.cpp
-@@ -137,6 +137,9 @@ bool WindowSDL::OpenImpl() {
+@@ -136,13 +136,20 @@ WindowSDL::~WindowSDL() {
+ bool WindowSDL::OpenImpl() {
    // SDL window coordinates are physical pixels on Windows and X11. Cocoa
    // uses logical points and applies the backing scale itself.
-   SDL_WindowFlags flags = SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY | SDL_WINDOW_HIDDEN;
+-  SDL_WindowFlags flags = SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY | SDL_WINDOW_HIDDEN;
++  SDL_WindowFlags flags = SDL_WINDOW_HIGH_PIXEL_DENSITY | SDL_WINDOW_HIDDEN;
++  if (IsFullscreen() || !REXCVAR_GET(borderless)) {
++    flags |= SDL_WINDOW_RESIZABLE;
++  }
 +  if (REXCVAR_GET(borderless) && !IsFullscreen()) {
 +    flags |= SDL_WINDOW_BORDERLESS;
 +  }
  #if REX_PLATFORM_MAC
    int initial_width = int(GetDesiredLogicalWidth());
    int initial_height = int(GetDesiredLogicalHeight());
-@@ -170,6 +173,10 @@ bool WindowSDL::OpenImpl() {
+ #else
+-  int initial_width = int(SizeToPhysical(GetDesiredLogicalWidth()));
+-  int initial_height = int(SizeToPhysical(GetDesiredLogicalHeight()));
++  // resolution/window_width are physical pixels on X11 and Windows.
++  int initial_width = int(GetDesiredLogicalWidth());
++  int initial_height = int(GetDesiredLogicalHeight());
+ #endif
+   sdl_window_ = SDL_CreateWindow(GetTitle().c_str(), initial_width, initial_height, flags);
+   if (!sdl_window_) {
+@@ -170,6 +177,10 @@ bool WindowSDL::OpenImpl() {
      }
    }
  
@@ -498,6 +512,21 @@ index 2251429..0c026a3 100644
    if (IsFullscreen()) {
      // Borderless desktop fullscreen (a NULL display mode is SDL3's default).
      SDL_SetWindowFullscreen(sdl_window_, true);
+@@ -185,6 +196,14 @@ bool WindowSDL::OpenImpl() {
+   ApplyCursorVisibilityNow();
+   SDL_ShowWindow(sdl_window_);
+ 
++  if (!IsFullscreen() && REXCVAR_GET(borderless)) {
++    // Some window managers maximize borderless resizable windows. Keep the
++    // requested native client size and top-left position instead.
++    SDL_RestoreWindow(sdl_window_);
++    SDL_SetWindowResizable(sdl_window_, false);
++    SDL_SetWindowPosition(sdl_window_, 0, 0);
++  }
++
+   // Actualize state for the common Window code. Listener dispatch is handled
+   // by Window::Open after OpenImpl returns; these only record initial state.
+   int pixel_width = 0;
 diff --git a/tests/unit/CMakeLists.txt b/tests/unit/CMakeLists.txt
 index 7bd264b..dc63002 100644
 --- a/tests/unit/CMakeLists.txt
