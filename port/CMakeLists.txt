@@ -23,12 +23,13 @@ if(UNIX AND NOT APPLE)
   endif()
 endif()
 
-include(generated/rexglue.cmake)
+include(rexglue.cmake)
 
 # Sources
 set(DIABLO3_SOURCES
     src/main.cpp
     src/kernel_overrides.cpp
+    src/base_exit.cpp
 )
 
 if(WIN32)
