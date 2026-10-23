@@ -290,9 +290,21 @@ Accepted values are `720p`, `1080p`, `1440p`, `1800p`, `2160p`/`4k`, and
 arbitrary `WIDTHxHEIGHT` strings. This changes the guest video mode and the
 window/swapchain size. The game's final guest swap/front buffer is still
 **1280×720**, so the presenter upscales that image to the configured window;
-`resolution` alone does not raise the fixed front buffer. `draw_resolution_scale_x/y`
-(or `--res-scale`) remains a separate internal 3D supersampling control, but it
-does not change the 2D UI/front-buffer resolution.
+`resolution` alone does not raise the fixed front buffer.
+
+`draw_resolution_scale_x/y` (or `--res-scale`) is the real internal rendering
+control. At `--res-scale 2` the swap source becomes **2560×1440**, giving sharp
+UI and 3D at 1440p. On the tested Intel Arc B390 this runs at roughly **33 FPS**,
+versus about **60 FPS** at `--res-scale 1` with a 720p source upscaled to
+1440p:
+
+```sh
+# True 1440p internal rendering (~33 FPS on the tested GPU)
+python3 apply_config.py --res-scale 2 --resolution 1440p
+
+# 60 FPS presentation, 720p source upscaled to 1440p
+python3 apply_config.py --res-scale 1 --resolution 1440p
+```
 
 Diablo III's 3D viewport is 16:9. A 16:9 mode fills the window correctly. A
 wider mode such as `2560x1080` renders the full-width title art, but the menu
