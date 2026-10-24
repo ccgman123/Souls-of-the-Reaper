@@ -102,6 +102,10 @@ def find_nix() -> str | None:
     return shutil.which("nix")
 
 
+def is_nixos() -> bool:
+    return Path("/etc/NIXOS").exists()
+
+
 def has_build_tools() -> bool:
     compiler = shutil.which("clang-20") or shutil.which("clang") or shutil.which("clang++")
     return bool(
@@ -274,6 +278,28 @@ def prepare_sdk_bundle(source: Path) -> tuple[Path, Path]:
     if not (codegen.is_file() and os.access(codegen, os.X_OK)):
         raise InstallError(f"SDK bundle has no executable install/bin/rexglue: {root}")
 
+    # Verify that the bundled codegen can actually execute on this host. A
+    # bundle built for glibc Linux will not run on NixOS without nix-ld, and
+    # should be rejected before the installer reaches the build phase.
+    bundle_env = os.environ.copy()
+    lib_dirs = [str(install / "lib64"), str(install / "lib")]
+    bundle_env["LD_LIBRARY_PATH"] = ":".join(lib_dirs + [bundle_env.get("LD_LIBRARY_PATH", "")])
+    probe = subprocess.run(
+        [str(codegen), "--version"],
+        env=bundle_env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        check=False,
+    )
+    if probe.returncode != 0:
+        detail = probe.stdout.strip().splitlines()[-1] if probe.stdout.strip() else "no output"
+        raise InstallError(
+            f"SDK bundle codegen cannot run on this host: {detail}. "
+            "On NixOS, omit --sdk-bundle and let the installer build the SDK "
+            "with the Nix dev shell."
+        )
+
     metadata_path = root / "metadata.json"
     if metadata_path.is_file():
         try:
@@ -344,7 +370,13 @@ def build_installer_command(args: argparse.Namespace, out: Path) -> list[str]:
 
 def install(args: argparse.Namespace) -> int:
     if args.sdk_bundle is None and args.sdk_dir is None and DEFAULT_SDK_BUNDLE.is_file():
-        args.sdk_bundle = DEFAULT_SDK_BUNDLE
+        if is_nixos():
+            log(
+                "NOTE: ignoring the glibc SDK bundle on NixOS; "
+                "building the pinned SDK with the Nix dev shell instead."
+            )
+        else:
+            args.sdk_bundle = DEFAULT_SDK_BUNDLE
     if args.sdk_bundle is not None and args.sdk_dir is not None:
         raise InstallError("use either --sdk-dir or --sdk-bundle, not both")
     out = (args.out or DEFAULT_OUT).expanduser().resolve()

@@ -40,6 +40,10 @@ DEFAULT_OUT = ROOT / "game"
 DEFAULT_SDK_BUNDLE = ROOT / "sdk" / "rexglue-sdk-linux-amd64.tar.gz"
 
 
+def _is_nixos() -> bool:
+    return Path("/etc/NIXOS").exists()
+
+
 class InstallerApp:
     def __init__(
         self,
@@ -57,7 +61,7 @@ class InstallerApp:
         self.iso_var = tk.StringVar(value=str(iso or ""))
         self.out_var = tk.StringVar(value=str(out or DEFAULT_OUT))
         self.force_var = tk.BooleanVar(value=force)
-        if sdk_bundle is None and DEFAULT_SDK_BUNDLE.is_file():
+        if sdk_bundle is None and DEFAULT_SDK_BUNDLE.is_file() and not _is_nixos():
             sdk_bundle = DEFAULT_SDK_BUNDLE
         self.sdk_bundle_var = tk.StringVar(value=str(sdk_bundle or ""))
         self.resolution_var = tk.StringVar(value="1440p")

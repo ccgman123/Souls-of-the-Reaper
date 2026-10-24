@@ -190,6 +190,12 @@ The bundle is ABI-specific. Build it on the oldest Linux distribution/glibc
 you intend to support (for example Ubuntu 22.04 / glibc 2.35) before publishing
 it. A bundle built in Nix on a newer glibc will not run on older systems.
 
+On NixOS, an Ubuntu/glibc SDK bundle cannot execute directly because its
+`/lib64/ld-linux-x86-64.so.2` interpreter is unavailable. The installer
+automatically ignores an auto-detected `sdk/` bundle on NixOS and builds the
+pinned SDK through the Nix dev shell. Do not pass `--sdk-bundle` on NixOS;
+explicit incompatible bundles are rejected with a clear error.
+
 ## Build
 
 ```sh
