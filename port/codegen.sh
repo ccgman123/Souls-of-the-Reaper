@@ -12,11 +12,12 @@
 # at game/default.xex (manifest paths are relative to port/).
 #
 # Usage:
-#   ./port/codegen.sh [--sdk DIR] [--force] [-j N]
+#   ./port/codegen.sh [--sdk DIR] [--game-dir DIR] [--force] [-j N]
 #
 # Environment:
 #   REXSDK_DIR      ReXGlue SDK checkout (default: <repo>/rexglue-sdk)
 #   REXSDK_INSTALL  SDK install prefix (default: <SDK>/out/install/linux-amd64)
+#   GAME_DIR        Extracted game data directory (default: <repo>/game)
 #   CC / CXX        Compiler overrides
 #   JOBS            Parallel build jobs
 
@@ -25,10 +26,10 @@ set -eu
 REPO_ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 PORT_DIR="$REPO_ROOT/port"
 MANIFEST="$PORT_DIR/diablo3_manifest.toml"
-XEX="$REPO_ROOT/game/default.xex"
 
 SDK=${REXSDK_DIR:-"$REPO_ROOT/rexglue-sdk"}
 SDK_INSTALL=${REXSDK_INSTALL:-"$SDK/out/install/linux-amd64"}
+GAME_DIR=${GAME_DIR:-"$REPO_ROOT/game"}
 JOBS=${JOBS:-}
 FORCE=""
 
@@ -40,6 +41,7 @@ usage() {
 while [ $# -gt 0 ]; do
     case "$1" in
         -s|--sdk) SDK=$2; shift 2 ;;
+        -g|--game-dir) GAME_DIR=$2; shift 2 ;;
         -j|--jobs) JOBS=$2; shift 2 ;;
         -f|--force) FORCE="-f"; shift ;;
         -h|--help) usage 0 ;;
@@ -49,12 +51,44 @@ done
 
 die() { echo "ERROR: $*" >&2; exit 1; }
 
+case "$GAME_DIR" in
+    /*) ;;
+    *) GAME_DIR="$REPO_ROOT/$GAME_DIR" ;;
+esac
+XEX="$GAME_DIR/default.xex"
+
 command -v cmake >/dev/null 2>&1 || die "cmake not found (need >= 3.25)"
 command -v ninja >/dev/null 2>&1 || die "ninja not found"
 command -v pkg-config >/dev/null 2>&1 || die "pkg-config not found (needed for Wayland/X11)"
 [ -d "$SDK" ] || die "ReXGlue SDK not found at $SDK (clone it or set REXSDK_DIR)"
 [ -f "$MANIFEST" ] || die "manifest not found: $MANIFEST"
 [ -f "$XEX" ] || die "missing $XEX (decrypted XEX; see docs/LINUX.md)"
+
+# Codegen resolves manifest paths relative to port/. Write a local manifest
+# when the game data is not in the default game/ directory.
+if [ "$GAME_DIR" != "$REPO_ROOT/game" ]; then
+    LOCAL_MANIFEST="$PORT_DIR/local_manifest.toml"
+    python3 - "$MANIFEST" "$LOCAL_MANIFEST" "$GAME_DIR" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+source, target, game_dir = sys.argv[1:4]
+text = Path(source).read_text(encoding="utf-8")
+text = text.replace(
+    'game_root = "../game"',
+    f"game_root = {json.dumps(game_dir)}",
+    1,
+)
+text = text.replace(
+    'file_path = "../game/default.xex"',
+    f"file_path = {json.dumps(game_dir + '/default.xex')}",
+    1,
+)
+Path(target).write_text(text, encoding="utf-8")
+PY
+    MANIFEST="$LOCAL_MANIFEST"
+fi
 
 if [ -n "${CC:-}" ]; then COMPILER_C=$CC; elif command -v clang-20 >/dev/null 2>&1; then COMPILER_C=clang-20; else COMPILER_C=clang; fi
 if [ -n "${CXX:-}" ]; then COMPILER_CXX=$CXX; elif command -v clang++-20 >/dev/null 2>&1; then COMPILER_CXX=clang++-20; else COMPILER_CXX=clang++; fi

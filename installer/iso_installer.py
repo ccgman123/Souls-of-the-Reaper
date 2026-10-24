@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Graphical Diablo III disc-data installer for Linux.
+"""Graphical Diablo III installer for Linux.
 
-The installer is deliberately a thin GUI over port/extract_iso.py: the
-XDVDFS reader, language detection, and extraction behavior stay in the
-tested command-line tool. This window only chooses the source/destination,
-shows progress and the extractor log, and can cancel a running extraction.
+The GUI drives port/install_game.py, which owns the full pipeline: disc
+extraction, pinned ReXGlue SDK bootstrap/build, codegen, game build, config,
+and optional launch. This window chooses the ISO, destination, display/build
+options, streams the combined log, and can cancel the running child process.
 
 Run it with ./install-diablo3.sh (which falls back to the Nix dev shell when
 Tkinter is not installed in the host Python).
@@ -35,19 +35,24 @@ except ImportError as exc:  # pragma: no cover - depends on the host Python
 
 ROOT = Path(__file__).resolve().parent.parent
 EXTRACTOR = ROOT / "port" / "extract_iso.py"
+INSTALLER = ROOT / "port" / "install_game.py"
 DEFAULT_OUT = ROOT / "game"
 
 
 class InstallerApp:
     def __init__(self, root: tk.Tk, iso: Path | None, out: Path | None, force: bool) -> None:
         self.root = root
-        self.root.title("Souls of the Reaper — Game Data Installer")
+        self.root.title("Souls of the Reaper — Linux Installer")
         self.root.minsize(720, 520)
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
 
         self.iso_var = tk.StringVar(value=str(iso or ""))
         self.out_var = tk.StringVar(value=str(out or DEFAULT_OUT))
         self.force_var = tk.BooleanVar(value=force)
+        self.resolution_var = tk.StringVar(value="1440p")
+        self.scale_var = tk.StringVar(value="1")
+        self.fullscreen_var = tk.BooleanVar(value=True)
+        self.launch_var = tk.BooleanVar(value=True)
         self.status_var = tk.StringVar(value="Select the Xbox 360 disc image to begin.")
         self.progress_var = tk.DoubleVar(value=0.0)
 
@@ -57,6 +62,8 @@ class InstallerApp:
         self._close_when_done = False
         self._last_error = ""
         self._next_steps = ""
+        self._phase_index = 0
+        self._phase_total = 7
         self._running = False
 
         self._build_ui()
@@ -71,7 +78,7 @@ class InstallerApp:
 
         title = ttk.Label(
             outer,
-            text="Install Diablo III game data",
+            text="Install Diablo III for Linux",
             font=("TkDefaultFont", 15, "bold"),
         )
         title.grid(row=0, column=0, columnspan=3, sticky="w")
@@ -79,8 +86,10 @@ class InstallerApp:
         subtitle = ttk.Label(
             outer,
             text=(
-                "Choose the Xbox 360 ISO/XISO and a destination folder. "
-                "The disc is read directly; no mount is required."
+                "Choose the Xbox 360 ISO/XISO and a destination folder. The installer "
+                "extracts the disc, clones/builds the pinned ReXGlue SDK, runs codegen, "
+                "builds the Linux game, writes the configuration, and optionally launches it. "
+                "The first build can take roughly 20–30 minutes."
             ),
             wraplength=660,
         )
@@ -98,12 +107,54 @@ class InstallerApp:
         self.out_button = ttk.Button(outer, text="Browse…", command=self._browse_out)
         self.out_button.grid(row=3, column=2, sticky="ew", pady=3)
 
+        options = ttk.LabelFrame(outer, text="Install options", padding=(10, 6))
+        options.grid(row=4, column=0, columnspan=3, sticky="ew", pady=(6, 12))
+        options.columnconfigure(3, weight=1)
+
         self.force_check = ttk.Checkbutton(
-            outer,
-            text="Re-extract files that already exist",
+            options,
+            text="Re-extract existing files",
             variable=self.force_var,
         )
-        self.force_check.grid(row=4, column=1, columnspan=2, sticky="w", padx=(10, 0), pady=(6, 12))
+        self.force_check.grid(row=0, column=0, sticky="w", padx=(0, 18))
+
+        ttk.Label(options, text="Resolution:").grid(row=0, column=1, sticky="e", padx=(0, 6))
+        self.resolution_combo = ttk.Combobox(
+            options,
+            textvariable=self.resolution_var,
+            values=("720p", "1080p", "1440p", "4k"),
+            width=10,
+            state="readonly",
+        )
+        self.resolution_combo.grid(row=0, column=2, sticky="w", padx=(0, 18))
+
+        self.fullscreen_check = ttk.Checkbutton(
+            options,
+            text="Fullscreen",
+            variable=self.fullscreen_var,
+        )
+        self.fullscreen_check.grid(row=0, column=3, sticky="w")
+
+        ttk.Label(options, text="Internal scale:").grid(row=1, column=0, sticky="w", pady=(6, 0))
+        self.scale_combo = ttk.Combobox(
+            options,
+            textvariable=self.scale_var,
+            values=("1", "2", "3"),
+            width=4,
+            state="readonly",
+        )
+        self.scale_combo.grid(row=1, column=1, sticky="w", pady=(6, 0))
+        ttk.Label(
+            options,
+            text="1 = 720p/60 FPS · 2 = 1440p/higher detail · 3 = 2160p",
+        ).grid(row=1, column=2, columnspan=2, sticky="w", padx=(12, 0), pady=(6, 0))
+
+        self.launch_check = ttk.Checkbutton(
+            options,
+            text="Launch when finished",
+            variable=self.launch_var,
+        )
+        self.launch_check.grid(row=2, column=0, columnspan=2, sticky="w", pady=(6, 0))
 
         self.progress = ttk.Progressbar(
             outer,
@@ -117,7 +168,7 @@ class InstallerApp:
         status = ttk.Label(outer, textvariable=self.status_var, wraplength=680)
         status.grid(row=6, column=0, columnspan=3, sticky="w", pady=(0, 10))
 
-        log_frame = ttk.LabelFrame(outer, text="Extraction log", padding=8)
+        log_frame = ttk.LabelFrame(outer, text="Installer log", padding=8)
         log_frame.grid(row=7, column=0, columnspan=3, sticky="nsew", pady=(0, 12))
         outer.rowconfigure(7, weight=1)
         log_frame.columnconfigure(0, weight=1)
@@ -146,7 +197,7 @@ class InstallerApp:
 
         self.copy_button = ttk.Button(
             buttons,
-            text="Copy next steps",
+            text="Copy launch command",
             command=self._copy_next_steps,
             state="disabled",
         )
@@ -162,7 +213,7 @@ class InstallerApp:
 
         self.extract_button = ttk.Button(
             buttons,
-            text="Extract",
+            text="Install & build",
             command=self._start,
             style="Accent.TButton",
         )
@@ -233,10 +284,10 @@ class InstallerApp:
                 parent=self.root,
             )
             return None
-        if not EXTRACTOR.is_file():
+        if not EXTRACTOR.is_file() or not INSTALLER.is_file():
             messagebox.showerror(
-                "Extractor missing",
-                f"Could not find the extractor:\n\n{EXTRACTOR}",
+                "Installer files missing",
+                f"Could not find the installer components:\n\n{EXTRACTOR}\n{INSTALLER}",
                 parent=self.root,
             )
             return None
@@ -255,19 +306,42 @@ class InstallerApp:
         self._clear_log()
         self._last_error = ""
         self._next_steps = ""
+        self._phase_index = 0
+        self._phase_total = 7
         self.open_button.configure(state="disabled")
         self.copy_button.configure(state="disabled")
         self.progress_var.set(0.0)
-        self.status_var.set("Preparing extraction…")
+        self.status_var.set("Preparing installation…")
         self._append_log(f"Disc image: {iso}")
         self._append_log(f"Game data:  {out}")
+        self._append_log(f"Resolution: {self.resolution_var.get()}  "
+                         f"internal scale: {self.scale_var.get()}x  "
+                         f"fullscreen: {'yes' if self.fullscreen_var.get() else 'no'}")
         if self.force_var.get():
-            self._append_log("Overwrite existing files: yes")
+            self._append_log("Re-extract existing files: yes")
         self._append_log("")
 
-        cmd = [sys.executable, "-u", str(EXTRACTOR), str(iso), "--out", str(out)]
+        cmd = [
+            sys.executable,
+            "-u",
+            str(INSTALLER),
+            "--iso",
+            str(iso),
+            "--out",
+            str(out),
+            "--resolution",
+            self.resolution_var.get(),
+            "--res-scale",
+            self.scale_var.get(),
+            "--fullscreen",
+            "true" if self.fullscreen_var.get() else "false",
+            "--borderless",
+            "false",
+        ]
         if self.force_var.get():
             cmd.append("--force")
+        if self.launch_var.get():
+            cmd.append("--launch")
 
         try:
             self._proc = subprocess.Popen(
@@ -279,8 +353,8 @@ class InstallerApp:
                 start_new_session=True,
             )
         except OSError as exc:
-            messagebox.showerror("Could not start extractor", str(exc), parent=self.root)
-            self.status_var.set("Extraction failed.")
+            messagebox.showerror("Could not start installer", str(exc), parent=self.root)
+            self.status_var.set("Installation failed.")
             return
 
         self._cancel_requested = False
@@ -315,17 +389,30 @@ class InstallerApp:
         if line:
             self._append_log(line)
 
+        match = re.match(r"==>\s*\[(\d+)/(\d+)\]\s*(.*)", line)
+        if match:
+            index = int(match.group(1))
+            total = max(1, int(match.group(2)))
+            self._phase_index = index
+            self._phase_total = total
+            detail = match.group(3).strip()
+            self.progress_var.set(100.0 * (index - 1) / total)
+            self.status_var.set(f"[{index}/{total}] {detail}")
+            return
+
         match = re.search(r"Extracting (\d+) files", line)
         if match:
             self.status_var.set(f"Extracting {match.group(1)} files…")
             return
 
         match = re.match(r"\[(\d+)/(\d+)\]\s*(.*)", line)
-        if match:
+        if match and self._phase_index == 1:
             index = int(match.group(1))
             total = max(1, int(match.group(2)))
             detail = match.group(3).strip()
-            self.progress_var.set(100.0 * index / total)
+            self.progress_var.set(
+                100.0 * ((self._phase_index - 1) + index / total) / self._phase_total
+            )
             self.status_var.set(f"Extracting {index}/{total}: {detail}")
             return
 
@@ -333,48 +420,49 @@ class InstallerApp:
             self.status_var.set(line)
             return
 
-        if line.startswith("error:") or "error:" in line.lower():
+        if line.startswith("error:") or "error:" in line.lower() or line.startswith("ERROR:"):
             self._last_error = line
-            self.status_var.set("Extraction failed.")
+            self.status_var.set("Installation failed.")
             return
 
         if line.startswith("Done."):
             self.status_var.set("Extraction complete.")
-            self.progress_var.set(100.0)
+            return
 
     def _handle_done(self, rc: int) -> None:
         self._proc = None
         self._set_running(False)
 
         if self._cancel_requested:
-            self.status_var.set("Extraction cancelled.")
+            self.status_var.set("Installation cancelled.")
             self._append_log("")
-            self._append_log("Extraction cancelled by the user.")
+            self._append_log("Installation cancelled by the user.")
             if self._close_when_done:
                 self.root.destroy()
             return
 
         if rc == 0:
             out = Path(self.out_var.get().strip() or DEFAULT_OUT).expanduser().resolve()
-            self.status_var.set("Extraction complete.")
+            self.status_var.set("Installation complete.")
             self.progress_var.set(100.0)
             self.open_button.configure(state="normal")
             self._next_steps = self._make_next_steps(out)
             self.copy_button.configure(state="normal")
+            launched = self.launch_var.get()
             messagebox.showinfo(
-                "Extraction complete",
-                "Game data was extracted successfully.\n\n"
-                f"{out}\n\n"
-                "Next steps are shown in the log. You can copy them with "
-                "'Copy next steps'.",
+                "Installation complete",
+                "Diablo III is installed and built successfully.\n\n"
+                f"Game data: {out}\n"
+                f"Launch: ./launch-diablo3.sh\n\n"
+                + ("The game has been launched." if launched else "Use the launch command above."),
                 parent=self.root,
             )
         else:
-            self.status_var.set("Extraction failed.")
+            self.status_var.set("Installation failed.")
             self._append_log("")
-            detail = self._last_error or "The extractor exited with an error. See the log above."
+            detail = self._last_error or "The installer exited with an error. See the log above."
             self._append_log(detail)
-            messagebox.showerror("Extraction failed", detail, parent=self.root)
+            messagebox.showerror("Installation failed", detail, parent=self.root)
 
         if self._close_when_done:
             self.root.destroy()
@@ -388,9 +476,13 @@ class InstallerApp:
             self.out_entry,
             self.out_button,
             self.force_check,
+            self.fullscreen_check,
+            self.launch_check,
             self.extract_button,
         ):
             widget.configure(state=state)
+        for widget in (self.resolution_combo, self.scale_combo):
+            widget.configure(state="disabled" if running else "readonly")
         self.cancel_button.configure(state="normal" if running else "disabled")
         self.close_button.configure(state="disabled" if running else "normal")
 
@@ -400,7 +492,7 @@ class InstallerApp:
         self._cancel_requested = True
         self.cancel_button.configure(state="disabled")
         self.status_var.set("Cancelling…")
-        self._append_log("Cancelling extraction…")
+        self._append_log("Cancelling installation…")
         proc = self._proc
         try:
             if hasattr(os, "killpg"):
@@ -416,8 +508,8 @@ class InstallerApp:
     def _on_close(self) -> None:
         if self._running:
             if not messagebox.askyesno(
-                "Cancel extraction?",
-                "Extraction is still running. Cancel it and close the installer?",
+                "Cancel installation?",
+                "The installation is still running. Cancel it and close the installer?",
                 parent=self.root,
             ):
                 return
@@ -462,9 +554,7 @@ class InstallerApp:
         return "\n".join(
             [
                 f'cd "{ROOT}"',
-                "./port/codegen.sh",
-                "./port/build.sh -c RelWithDebInfo",
-                f'python3 apply_config.py --game-data-root "{out}"',
+                f'# Game data: {out}',
                 "./launch-diablo3.sh",
             ]
         )
@@ -475,7 +565,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--iso", type=Path, help="pre-fill the ISO/XISO path")
     parser.add_argument("--out", type=Path, help=f"pre-fill the game data folder (default: {DEFAULT_OUT})")
     parser.add_argument("--force", action="store_true", help="re-extract files that already exist")
-    parser.add_argument("--version", action="version", version="Souls of the Reaper installer 1.0")
+    parser.add_argument("--version", action="version", version="Souls of the Reaper installer 2.0")
     return parser.parse_args(argv)
 
 

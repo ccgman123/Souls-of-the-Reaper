@@ -14,6 +14,7 @@ document covers what is already wired up and what still needs work.
 | Generated-code hand patches | ported to `port/apply_generated_patches.py` |
 | Config writer | ported to `apply_config.py` |
 | Build/codegen scripts | `port/build_sdk.sh`, `port/build.sh`, `port/codegen.sh` |
+| End-to-end installer | `install-diablo3.sh`, `installer/iso_installer.py`, `port/install_game.py` |
 | Window / input / audio | SDL3 (vendored), including borderless windows and HIDAPI controllers |
 | Rendering | Vulkan host-RT hooks ported; full build and runtime verified on Intel Arc (Mesa) — see "Rendering" below |
 
@@ -106,7 +107,9 @@ game/CommonTOC.dat      if the disc has one
 
 `--out DIR` selects another game root and `--force` re-extracts files that are
 already present. Re-running without `--force` skips files with the right size,
-so an interrupted extraction can be resumed.
+so an interrupted extraction can be resumed. The installer passes the chosen
+game-data directory to codegen and writes a local manifest automatically; for
+manual builds, use `./port/codegen.sh --game-dir DIR`.
 
 `port/diablo3_manifest.toml` points at `../game/default.xex` relative to
 `port/`. Dumps named `Default_decrypted.exe` are accepted and written as
@@ -114,29 +117,50 @@ so an interrupted extraction can be resumed.
 
 ### Graphical installer
 
-There is a small Tkinter GUI that wraps the same extractor:
+The Tkinter installer now runs the complete Linux setup, not just extraction:
 
 ```sh
 ./install-diablo3.sh
 ```
 
-Choose the ISO/XISO with **Browse…** or type its path directly, choose the game
-data folder (default: `game/` at the repository root), and press **Extract**.
-The window shows the extractor's progress and log; **Cancel** stops the child
-process, and **Copy next steps** puts the codegen/build/config commands on the
-clipboard.
+Choose the ISO/XISO and game-data folder, then press **Install & build**. The
+installer runs these phases in order:
 
-The helper supports:
+1. extract `game/default.xex`, CPKs, and `CommonTOC.dat`;
+2. obtain the pinned ReXGlue SDK checkout (an existing pinned checkout is
+   reused; otherwise it is cloned into `.install/rexglue-sdk/`);
+3. build and install the SDK, applying the repository patches;
+4. run codegen and re-apply the generated-code hand patches;
+5. build the Linux game;
+6. write the launcher configuration;
+7. launch the game if **Launch when finished** is checked.
+
+The first run is the long one (roughly 20–30 minutes depending on the CPU and
+network). Later runs reuse the SDK/build directories. The log streams all
+child-process output; **Cancel** stops the current phase and the installation.
+The display options in the installer are the guest resolution, internal scale
+(`1x` = 720p/60 FPS, `2x` = 1440p/higher detail, `3x` = 2160p), and fullscreen.
+
+The GUI can also be pre-filled:
 
 ```sh
 ./install-diablo3.sh --iso "/path/to/disc.iso" --out "$PWD/game"
 ./install-diablo3.sh --force       # re-extract existing files
 ```
 
+The headless equivalent, useful for scripts and debugging, is:
+
+```sh
+python3 port/install_game.py --iso "/path/to/disc.iso" --launch
+python3 port/install_game.py --iso "/path/to/disc.iso" --extract-only
+python3 port/install_game.py --iso "/path/to/disc.iso" --sdk-dir /path/to/pinned/rexglue-sdk
+```
+
 The wrapper uses the host Python if Tkinter is available. Otherwise it falls
-back to the Nix dev shell (which includes Tkinter), or prints the equivalent
-command-line extraction command. On a distribution build install `python3-tk`
-(Debian/Ubuntu) or `python3-tkinter` (Fedora).
+back to the Nix dev shell (which includes Tkinter). On a distribution build
+install `python3-tk` (Debian/Ubuntu) or `python3-tkinter` (Fedora). If the
+build toolchain is not on `PATH`, `install_game.py` automatically uses the Nix
+dev shell when Nix is available.
 
 ## Build
 
@@ -165,10 +189,14 @@ Useful options:
 ./port/build_sdk.sh --clean       # rebuild/install the SDK from scratch
 ./port/build.sh -c Debug          # debug runtime
 ./port/build.sh --clean           # wipe the port build directory
+./port/codegen.sh --game-dir /path/to/game
 REXSDK_DIR=/path/to/sdk ./port/build_sdk.sh
 REXSDK_DIR=/path/to/sdk ./port/build.sh
 python3 port/apply_generated_patches.py --generated-dir port/generated/default
 ```
+
+`codegen.sh --game-dir` writes a local manifest with the chosen game-data
+path, so the graphical installer's custom destination works end-to-end.
 
 ## Launch
 

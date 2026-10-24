@@ -90,7 +90,16 @@ if [ "$CLEAN" = 1 ] && [ -d "$BUILD_DIR" ]; then
     rm -rf "$BUILD_DIR"
 fi
 
+REXGLUE_CMAKE_DIR="$SDK_INSTALL/lib64/cmake/rexglue"
+[ -d "$REXGLUE_CMAKE_DIR" ] || REXGLUE_CMAKE_DIR="$SDK_INSTALL/lib/cmake/rexglue"
+
 CMAKE_ARGS="-DCMAKE_PREFIX_PATH=$SDK_INSTALL -DREXGLUE_ENABLE_TRACY=OFF"
+if [ -d "$REXGLUE_CMAKE_DIR" ]; then
+    # CMAKE_PREFIX_PATH alone does not override an existing rexglue_DIR cache
+    # entry when switching between SDK install prefixes (for example from a
+    # developer checkout to the installer-managed .install SDK).
+    CMAKE_ARGS="$CMAKE_ARGS -Drexglue_DIR=$REXGLUE_CMAKE_DIR"
+fi
 # Override the preset compiler only when the user asked for a specific one or
 # clang-20 is unavailable (the preset hardcodes clang-20).
 if [ -n "${CC:-}${CXX:-}" ] || ! command -v clang-20 >/dev/null 2>&1; then

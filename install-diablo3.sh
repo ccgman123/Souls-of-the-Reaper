@@ -1,5 +1,10 @@
 #!/usr/bin/env bash
-# Launch the graphical Diablo III disc-data installer.
+# Launch the graphical Diablo III Linux installer.
+#
+# The GUI extracts the ISO, builds the pinned SDK, runs codegen, builds the
+# game, writes the configuration, and optionally launches it. For a headless
+# run, use:
+#   python3 port/install_game.py --iso /path/disc.iso --launch
 #
 # The GUI needs Tkinter. If the host Python has it, run directly; otherwise
 # fall back to the repository's Nix dev shell, which includes Tkinter.
@@ -29,7 +34,7 @@ Tkinter is required to run the graphical installer.
 On Debian/Ubuntu:  sudo apt install python3-tk
 On Fedora:         sudo dnf install python3-tkinter
 
-Alternatively, run the command-line extractor:
-  python3 "$ROOT/port/extract_iso.py" /path/to/diablo.iso --out "$ROOT/game"
+Alternatively, run the headless installer:
+  python3 "$ROOT/port/install_game.py" --iso /path/to/diablo.iso --launch
 EOF
 exit 1

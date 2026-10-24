@@ -5,6 +5,9 @@ D3_Portable/
 # ReXGlue SDK - clone separately and apply patches/ (see README)
 rexglue-sdk/
 sdk-bin/
+# Installer-managed pinned SDK checkout (used when rexglue-sdk/ is absent or
+# at a different revision)
+.install/
 
 # Build outputs
 port/out/

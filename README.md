@@ -58,18 +58,22 @@ SoulsOfTheReaper.exe
 
 ## Option C — Linux (experimental)
 
-The ReXGlue SDK builds natively on Linux with the Vulkan backend. This repo now
-ships Linux build/codegen scripts and Python equivalents of the PowerShell
-patchers:
+The ReXGlue SDK builds natively on Linux with the Vulkan backend. The graphical
+installer handles the whole flow: ISO extraction, pinned SDK bootstrap/build,
+codegen, game build, configuration, and optional launch.
 
 ```sh
-git clone https://github.com/rexglue/rexglue-sdk.git
-git -C rexglue-sdk checkout c94f5ebdcb3c9d1a460ca48e04f9758448f8d518  # ReXGlue 0.10.0
-git -C rexglue-sdk submodule update --init --recursive
-
-python3 port/extract_iso.py "/path/to/Diablo III ... (USA).iso"
-# or use the graphical installer:
 ./install-diablo3.sh
+# or headless:
+python3 port/install_game.py --iso "/path/to/Diablo III ... (USA).iso" --launch
+```
+
+The installer reuses an existing pinned `rexglue-sdk/` checkout, or clones the
+pinned revision into `.install/rexglue-sdk/`. The manual equivalent is still
+available:
+
+```sh
+python3 port/extract_iso.py "/path/to/Diablo III ... (USA).iso"
 ./port/build_sdk.sh               # build/install the pinned SDK (~10 min first time)
 ./port/codegen.sh                 # transcode game/default.xex (~1 min)
 ./port/build.sh -c RelWithDebInfo # -> port/out/build/linux-amd64-relwithdebinfo/diablo3
