@@ -69,7 +69,9 @@ python3 port/install_game.py --iso "/path/to/Diablo III ... (USA).iso" --launch
 ```
 
 The installer reuses an existing pinned `rexglue-sdk/` checkout, or clones the
-pinned revision into `.install/rexglue-sdk/`. The manual equivalent is still
+pinned revision into `.install/rexglue-sdk/`. The SDK can also be packaged
+ahead of time with `./port/package_sdk.sh` and passed with `--sdk-bundle`; this
+skips the 10–15 minute SDK clone/build. The manual equivalent is still
 available:
 
 ```sh

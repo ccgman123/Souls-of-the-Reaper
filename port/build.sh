@@ -20,6 +20,7 @@
 # Environment:
 #   REXSDK_DIR      ReXGlue SDK checkout (default: <repo>/rexglue-sdk)
 #   REXSDK_INSTALL  SDK install prefix (default: <SDK>/out/install/linux-amd64)
+#   REXSDK_PREBUILT 1 when using a prebuilt SDK bundle (no source checkout)
 #   CC / CXX        Compiler overrides (default: clang-20 if present, else clang)
 #   JOBS            Parallel build jobs
 
@@ -32,6 +33,7 @@ CONFIG=RelWithDebInfo
 JOBS=${JOBS:-}
 SDK=${REXSDK_DIR:-"$REPO_ROOT/rexglue-sdk"}
 SDK_INSTALL=${REXSDK_INSTALL:-"$SDK/out/install/linux-amd64"}
+PREBUILT=${REXSDK_PREBUILT:-0}
 CLEAN=0
 APPLY_PATCH=1
 
@@ -66,14 +68,16 @@ die() { echo "ERROR: $*" >&2; exit 1; }
 command -v cmake >/dev/null 2>&1 || die "cmake not found (need >= 3.25)"
 command -v ninja >/dev/null 2>&1 || die "ninja not found"
 command -v pkg-config >/dev/null 2>&1 || die "pkg-config not found (needed for Wayland/X11)"
-[ -d "$SDK" ] || die "ReXGlue SDK not found at $SDK (clone it or set REXSDK_DIR)"
+if [ "$PREBUILT" != 1 ]; then
+    [ -d "$SDK" ] || die "ReXGlue SDK not found at $SDK (clone it or set REXSDK_DIR)"
+fi
 
 if [ -n "${CC:-}" ]; then COMPILER_C=$CC; elif command -v clang-20 >/dev/null 2>&1; then COMPILER_C=clang-20; else COMPILER_C=clang; fi
 if [ -n "${CXX:-}" ]; then COMPILER_CXX=$CXX; elif command -v clang++-20 >/dev/null 2>&1; then COMPILER_CXX=clang++-20; else COMPILER_CXX=clang++; fi
 command -v "$COMPILER_C" >/dev/null 2>&1 || die "C compiler '$COMPILER_C' not found"
 command -v "$COMPILER_CXX" >/dev/null 2>&1 || die "C++ compiler '$COMPILER_CXX' not found"
 
-if [ "$APPLY_PATCH" = 1 ]; then
+if [ "$APPLY_PATCH" = 1 ] && [ "$PREBUILT" != 1 ]; then
     "$PORT_DIR/apply_sdk_patches.sh" "$SDK"
 fi
 
@@ -85,10 +89,30 @@ if [ ! -f "$SDK_INSTALL/lib/cmake/rexglue/rexglueConfig.cmake" ] &&
     die "ReXGlue SDK is not installed at $SDK_INSTALL. Build/install the SDK first (see docs/LINUX.md)."
 fi
 
+SDK_MODE=source
+[ "$PREBUILT" = 1 ] && SDK_MODE=prebuilt
+SDK_STAMP_VALUE="$SDK_INSTALL|$SDK_MODE"
+SDK_STAMP="$BUILD_DIR/.sotr-sdk-prefix"
+if [ -d "$BUILD_DIR" ]; then
+    cached_prefix=""
+    if [ -f "$BUILD_DIR/CMakeCache.txt" ]; then
+        cached_prefix=$(sed -n 's/^CMAKE_PREFIX_PATH:[^=]*=//p' "$BUILD_DIR/CMakeCache.txt" | head -n 1)
+    fi
+    if [ -f "$SDK_STAMP" ] && [ "$(cat "$SDK_STAMP")" != "$SDK_STAMP_VALUE" ]; then
+        echo "==> SDK prefix/mode changed; cleaning CMake cache"
+        rm -rf "$BUILD_DIR"
+    elif [ -n "$cached_prefix" ] && [ "$cached_prefix" != "$SDK_INSTALL" ]; then
+        echo "==> SDK prefix changed; cleaning CMake cache"
+        rm -rf "$BUILD_DIR"
+    fi
+fi
+
 if [ "$CLEAN" = 1 ] && [ -d "$BUILD_DIR" ]; then
     echo "==> Cleaning $BUILD_DIR"
     rm -rf "$BUILD_DIR"
 fi
+mkdir -p "$BUILD_DIR"
+printf '%s\n' "$SDK_STAMP_VALUE" > "$SDK_STAMP"
 
 REXGLUE_CMAKE_DIR="$SDK_INSTALL/lib64/cmake/rexglue"
 [ -d "$REXGLUE_CMAKE_DIR" ] || REXGLUE_CMAKE_DIR="$SDK_INSTALL/lib/cmake/rexglue"

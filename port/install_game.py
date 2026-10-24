@@ -19,6 +19,7 @@ Examples:
   python3 port/install_game.py --iso /path/disc.iso --launch
   python3 port/install_game.py --iso /path/disc.iso --extract-only
   python3 port/install_game.py --iso /path/disc.iso --sdk-dir /path/rexglue-sdk
+  python3 port/install_game.py --iso /path/disc.iso --sdk-bundle sdk.tar.gz
 
 If cmake/ninja/clang are not on PATH but Nix is available, build steps are run
 inside the repository dev shell. The launcher still handles the runtime Nix
@@ -35,6 +36,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+import tarfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -44,6 +46,7 @@ APPLY_CONFIG = ROOT / "apply_config.py"
 BUILD_PRESET = "linux-amd64-relwithdebinfo"
 TOML = ROOT / "port" / "out" / "build" / BUILD_PRESET / "diablo3.toml"
 DEFAULT_OUT = ROOT / "game"
+DEFAULT_SDK_BUNDLE = ROOT / "sdk" / "rexglue-sdk-linux-amd64.tar.gz"
 
 
 class InstallError(RuntimeError):
@@ -109,7 +112,9 @@ def has_build_tools() -> bool:
     )
 
 
-def nix_command(command: list[str], sdk_dir: Path, sdk_install: Path) -> list[str]:
+def nix_command(
+    command: list[str], sdk_dir: Path, sdk_install: Path, prebuilt: bool
+) -> list[str]:
     nix = find_nix()
     if not nix:
         raise InstallError(
@@ -124,6 +129,7 @@ def nix_command(command: list[str], sdk_dir: Path, sdk_install: Path) -> list[st
         "env",
         f"REXSDK_DIR={sdk_dir}",
         f"REXSDK_INSTALL={sdk_install}",
+        f"REXSDK_PREBUILT={1 if prebuilt else 0}",
         *command,
     ]
 
@@ -231,6 +237,59 @@ def ensure_sdk(requested: Path | None) -> tuple[Path, Path]:
     return sdk_dir, sdk_install
 
 
+def prepare_sdk_bundle(source: Path) -> tuple[Path, Path]:
+    """Unpack/validate a prebuilt SDK bundle and return (root, install)."""
+    source = source.expanduser().resolve()
+    if not source.exists():
+        raise InstallError(f"SDK bundle not found: {source}")
+
+    if source.is_dir():
+        root = source
+    else:
+        root = ROOT / ".install" / "sdk-bundle"
+        if root.exists():
+            shutil.rmtree(root)
+        root.mkdir(parents=True)
+        try:
+            with tarfile.open(source, "r:*") as archive:
+                try:
+                    archive.extractall(root, filter="data")
+                except TypeError:  # Python without the extraction filter
+                    archive.extractall(root)
+        except (OSError, tarfile.TarError) as exc:
+            raise InstallError(f"could not extract SDK bundle {source}: {exc}") from exc
+        children = list(root.iterdir())
+        if len(children) == 1 and children[0].is_dir():
+            root = children[0]
+
+    if not (root / "install").is_dir():
+        children = [child for child in root.iterdir() if child.is_dir()]
+        if len(children) == 1 and (children[0] / "install").is_dir():
+            root = children[0]
+
+    install = root / "install"
+    codegen = install / "bin" / "rexglue"
+    if not install.is_dir():
+        raise InstallError(f"SDK bundle has no install/ directory: {root}")
+    if not (codegen.is_file() and os.access(codegen, os.X_OK)):
+        raise InstallError(f"SDK bundle has no executable install/bin/rexglue: {root}")
+
+    metadata_path = root / "metadata.json"
+    if metadata_path.is_file():
+        try:
+            metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise InstallError(f"invalid SDK bundle metadata: {exc}") from exc
+        _, expected_commit = read_lock()
+        bundle_commit = str(metadata.get("sdk_commit", ""))
+        if bundle_commit and bundle_commit != expected_commit:
+            raise InstallError(
+                f"SDK bundle is built from {bundle_commit}, expected {expected_commit}"
+            )
+
+    return root, install
+
+
 def parse_bool(value: str) -> bool:
     lowered = value.strip().lower()
     if lowered in {"1", "true", "yes", "on"}:
@@ -284,6 +343,10 @@ def build_installer_command(args: argparse.Namespace, out: Path) -> list[str]:
 
 
 def install(args: argparse.Namespace) -> int:
+    if args.sdk_bundle is None and args.sdk_dir is None and DEFAULT_SDK_BUNDLE.is_file():
+        args.sdk_bundle = DEFAULT_SDK_BUNDLE
+    if args.sdk_bundle is not None and args.sdk_dir is not None:
+        raise InstallError("use either --sdk-dir or --sdk-bundle, not both")
     out = (args.out or DEFAULT_OUT).expanduser().resolve()
     iso = args.iso.expanduser().resolve() if args.iso else None
 
@@ -310,20 +373,33 @@ def install(args: argparse.Namespace) -> int:
     if not (out / "default.xex").is_file():
         raise InstallError(f"game/default.xex not found under {out}")
 
-    log("==> [2/7] Preparing the pinned ReXGlue SDK")
-    sdk_dir, sdk_install = ensure_sdk(args.sdk_dir)
+    prebuilt = args.sdk_bundle is not None
+    if prebuilt:
+        log("==> [2/7] Preparing the prebuilt ReXGlue SDK")
+        sdk_dir, sdk_install = prepare_sdk_bundle(args.sdk_bundle)
+    else:
+        log("==> [2/7] Preparing the pinned ReXGlue SDK")
+        sdk_dir, sdk_install = ensure_sdk(args.sdk_dir)
 
     build_env = os.environ.copy()
     build_env["REXSDK_DIR"] = str(sdk_dir)
     build_env["REXSDK_INSTALL"] = str(sdk_install)
+    build_env["REXSDK_PREBUILT"] = "1" if prebuilt else "0"
 
     def build_cmd(command: list[str]) -> list[str]:
-        return command if has_build_tools() else nix_command(command, sdk_dir, sdk_install)
+        return (
+            command
+            if has_build_tools()
+            else nix_command(command, sdk_dir, sdk_install, prebuilt)
+        )
 
     jobs = ["-j", str(args.jobs)] if args.jobs else []
 
     log("==> [3/7] Building and installing ReXGlue SDK")
-    run(build_cmd([str(ROOT / "port" / "build_sdk.sh"), *jobs]), env=build_env)
+    if prebuilt:
+        log("==> Using prebuilt SDK; skipping clone/build")
+    else:
+        run(build_cmd([str(ROOT / "port" / "build_sdk.sh"), *jobs]), env=build_env)
 
     log("==> [4/7] Generating game code")
     run(
@@ -376,6 +452,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--skip-extract", action="store_true", help="reuse an existing game-data directory")
     parser.add_argument("--extract-only", action="store_true", help="stop after extracting game data")
     parser.add_argument("--sdk-dir", type=Path, help="existing clean pinned ReXGlue SDK checkout")
+    parser.add_argument(
+        "--sdk-bundle",
+        type=Path,
+        help="prebuilt SDK bundle directory or .tar.gz created by port/package_sdk.sh",
+    )
     parser.add_argument("--jobs", type=int, help="parallel build jobs")
     parser.add_argument("--resolution", default="1440p", help="guest video mode/window (default: 1440p)")
     parser.add_argument("--res-scale", type=int, choices=[1, 2, 3], default=1)

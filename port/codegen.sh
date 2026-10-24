@@ -17,6 +17,7 @@
 # Environment:
 #   REXSDK_DIR      ReXGlue SDK checkout (default: <repo>/rexglue-sdk)
 #   REXSDK_INSTALL  SDK install prefix (default: <SDK>/out/install/linux-amd64)
+#   REXSDK_PREBUILT 1 when using a prebuilt SDK bundle (no source checkout)
 #   GAME_DIR        Extracted game data directory (default: <repo>/game)
 #   CC / CXX        Compiler overrides
 #   JOBS            Parallel build jobs
@@ -29,6 +30,7 @@ MANIFEST="$PORT_DIR/diablo3_manifest.toml"
 
 SDK=${REXSDK_DIR:-"$REPO_ROOT/rexglue-sdk"}
 SDK_INSTALL=${REXSDK_INSTALL:-"$SDK/out/install/linux-amd64"}
+PREBUILT=${REXSDK_PREBUILT:-0}
 GAME_DIR=${GAME_DIR:-"$REPO_ROOT/game"}
 JOBS=${JOBS:-}
 FORCE=""
@@ -60,7 +62,9 @@ XEX="$GAME_DIR/default.xex"
 command -v cmake >/dev/null 2>&1 || die "cmake not found (need >= 3.25)"
 command -v ninja >/dev/null 2>&1 || die "ninja not found"
 command -v pkg-config >/dev/null 2>&1 || die "pkg-config not found (needed for Wayland/X11)"
-[ -d "$SDK" ] || die "ReXGlue SDK not found at $SDK (clone it or set REXSDK_DIR)"
+if [ "$PREBUILT" != 1 ]; then
+    [ -d "$SDK" ] || die "ReXGlue SDK not found at $SDK (clone it or set REXSDK_DIR)"
+fi
 [ -f "$MANIFEST" ] || die "manifest not found: $MANIFEST"
 [ -f "$XEX" ] || die "missing $XEX (decrypted XEX; see docs/LINUX.md)"
 
@@ -93,23 +97,29 @@ fi
 if [ -n "${CC:-}" ]; then COMPILER_C=$CC; elif command -v clang-20 >/dev/null 2>&1; then COMPILER_C=clang-20; else COMPILER_C=clang; fi
 if [ -n "${CXX:-}" ]; then COMPILER_CXX=$CXX; elif command -v clang++-20 >/dev/null 2>&1; then COMPILER_CXX=clang++-20; else COMPILER_CXX=clang++; fi
 
-"$PORT_DIR/apply_sdk_patches.sh" "$SDK"
+if [ "$PREBUILT" != 1 ]; then
+    "$PORT_DIR/apply_sdk_patches.sh" "$SDK"
+fi
 
 REXGLUE="$SDK_INSTALL/bin/rexglue"
-[ -x "$REXGLUE" ] || REXGLUE="$SDK/out/build/linux-amd64/RelWithDebInfo/rexgluerd"
-[ -x "$REXGLUE" ] || REXGLUE="$SDK/out/build/linux-amd64/RelWithDebInfo/rexglue"
-[ -x "$REXGLUE" ] || REXGLUE="$SDK/out/linux-amd64/RelWithDebInfo/rexgluerd"
-[ -x "$REXGLUE" ] || REXGLUE="$SDK/out/linux-amd64/RelWithDebInfo/rexglue"
-[ -x "$REXGLUE" ] || REXGLUE="$SDK/out/linux-amd64/rexglue"
-if [ ! -x "$REXGLUE" ]; then
-    echo "==> ReXGlue SDK is not built/installed; building it now"
-    if [ -n "$JOBS" ]; then
-        "$PORT_DIR/build_sdk.sh" -j "$JOBS"
-    else
-        "$PORT_DIR/build_sdk.sh"
-    fi
-    REXGLUE="$SDK_INSTALL/bin/rexglue"
+if [ "$PREBUILT" = 1 ]; then
+    [ -x "$REXGLUE" ] || die "prebuilt SDK is missing $REXGLUE"
+else
+    [ -x "$REXGLUE" ] || REXGLUE="$SDK/out/build/linux-amd64/RelWithDebInfo/rexgluerd"
     [ -x "$REXGLUE" ] || REXGLUE="$SDK/out/build/linux-amd64/RelWithDebInfo/rexglue"
+    [ -x "$REXGLUE" ] || REXGLUE="$SDK/out/linux-amd64/RelWithDebInfo/rexgluerd"
+    [ -x "$REXGLUE" ] || REXGLUE="$SDK/out/linux-amd64/RelWithDebInfo/rexglue"
+    [ -x "$REXGLUE" ] || REXGLUE="$SDK/out/linux-amd64/rexglue"
+    if [ ! -x "$REXGLUE" ]; then
+        echo "==> ReXGlue SDK is not built/installed; building it now"
+        if [ -n "$JOBS" ]; then
+            "$PORT_DIR/build_sdk.sh" -j "$JOBS"
+        else
+            "$PORT_DIR/build_sdk.sh"
+        fi
+        REXGLUE="$SDK_INSTALL/bin/rexglue"
+        [ -x "$REXGLUE" ] || REXGLUE="$SDK/out/build/linux-amd64/RelWithDebInfo/rexglue"
+    fi
 fi
 [ -x "$REXGLUE" ] || die "could not locate the built rexglue binary"
 

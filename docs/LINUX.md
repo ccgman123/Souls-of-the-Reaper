@@ -15,6 +15,7 @@ document covers what is already wired up and what still needs work.
 | Config writer | ported to `apply_config.py` |
 | Build/codegen scripts | `port/build_sdk.sh`, `port/build.sh`, `port/codegen.sh` |
 | End-to-end installer | `install-diablo3.sh`, `installer/iso_installer.py`, `port/install_game.py` |
+| Prebuilt SDK packaging | `port/package_sdk.sh`, `--sdk-bundle` installer option |
 | Window / input / audio | SDL3 (vendored), including borderless windows and HIDAPI controllers |
 | Rendering | Vulkan host-RT hooks ported; full build and runtime verified on Intel Arc (Mesa) — see "Rendering" below |
 
@@ -161,6 +162,33 @@ back to the Nix dev shell (which includes Tkinter). On a distribution build
 install `python3-tk` (Debian/Ubuntu) or `python3-tkinter` (Fedora). If the
 build toolchain is not on `PATH`, `install_game.py` automatically uses the Nix
 dev shell when Nix is available.
+
+### Prebuilt SDK bundle
+
+The SDK build is the longest open-source part of the first install. It can be
+built once and shipped as an installer bundle:
+
+```sh
+./port/package_sdk.sh
+# -> port/out/sdk-bundles/rexglue-sdk-linux-amd64.tar.gz (+ .sha256)
+```
+
+Then install with:
+
+```sh
+python3 port/install_game.py --iso "/path/to/disc.iso" \
+    --sdk-bundle port/out/sdk-bundles/rexglue-sdk-linux-amd64.tar.gz --launch
+```
+
+The GUI has an **SDK bundle** field; it also auto-detects
+`sdk/rexglue-sdk-linux-amd64.tar.gz` when present. With a bundle, the installer
+skips SDK cloning/building and goes straight to codegen, the game build,
+configuration, and launch. The bundle contains the SDK headers/libraries/CMake
+package and the codegen tool, but **not** game data or generated game code.
+
+The bundle is ABI-specific. Build it on the oldest Linux distribution/glibc
+you intend to support (for example Ubuntu 22.04 / glibc 2.35) before publishing
+it. A bundle built in Nix on a newer glibc will not run on older systems.
 
 ## Build
 

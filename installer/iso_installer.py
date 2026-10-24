@@ -37,10 +37,18 @@ ROOT = Path(__file__).resolve().parent.parent
 EXTRACTOR = ROOT / "port" / "extract_iso.py"
 INSTALLER = ROOT / "port" / "install_game.py"
 DEFAULT_OUT = ROOT / "game"
+DEFAULT_SDK_BUNDLE = ROOT / "sdk" / "rexglue-sdk-linux-amd64.tar.gz"
 
 
 class InstallerApp:
-    def __init__(self, root: tk.Tk, iso: Path | None, out: Path | None, force: bool) -> None:
+    def __init__(
+        self,
+        root: tk.Tk,
+        iso: Path | None,
+        out: Path | None,
+        force: bool,
+        sdk_bundle: Path | None = None,
+    ) -> None:
         self.root = root
         self.root.title("Souls of the Reaper — Linux Installer")
         self.root.minsize(720, 520)
@@ -49,6 +57,9 @@ class InstallerApp:
         self.iso_var = tk.StringVar(value=str(iso or ""))
         self.out_var = tk.StringVar(value=str(out or DEFAULT_OUT))
         self.force_var = tk.BooleanVar(value=force)
+        if sdk_bundle is None and DEFAULT_SDK_BUNDLE.is_file():
+            sdk_bundle = DEFAULT_SDK_BUNDLE
+        self.sdk_bundle_var = tk.StringVar(value=str(sdk_bundle or ""))
         self.resolution_var = tk.StringVar(value="1440p")
         self.scale_var = tk.StringVar(value="1")
         self.fullscreen_var = tk.BooleanVar(value=True)
@@ -156,6 +167,16 @@ class InstallerApp:
         )
         self.launch_check.grid(row=2, column=0, columnspan=2, sticky="w", pady=(6, 0))
 
+        ttk.Label(options, text="SDK bundle:").grid(row=3, column=0, sticky="w", pady=(6, 0))
+        self.sdk_bundle_entry = ttk.Entry(options, textvariable=self.sdk_bundle_var)
+        self.sdk_bundle_entry.grid(row=3, column=1, columnspan=3, sticky="ew", padx=(0, 8), pady=(6, 0))
+        self.sdk_bundle_button = ttk.Button(
+            options,
+            text="Browse…",
+            command=self._browse_sdk_bundle,
+        )
+        self.sdk_bundle_button.grid(row=3, column=4, sticky="w", pady=(6, 0))
+
         self.progress = ttk.Progressbar(
             outer,
             orient="horizontal",
@@ -259,6 +280,22 @@ class InstallerApp:
         if path:
             self.out_var.set(path)
 
+    def _browse_sdk_bundle(self) -> None:
+        current = self.sdk_bundle_var.get().strip()
+        initial = Path(current).expanduser().parent if current else ROOT
+        path = filedialog.askopenfilename(
+            parent=self.root,
+            title="Select a prebuilt ReXGlue SDK bundle",
+            initialdir=str(initial) if initial.is_dir() else str(ROOT),
+            filetypes=[
+                ("SDK bundle", "*.tar.gz"),
+                ("SDK bundle", "*.tgz"),
+                ("All files", "*"),
+            ],
+        )
+        if path:
+            self.sdk_bundle_var.set(path)
+
     def _resolved_paths(self) -> tuple[Path, Path] | None:
         iso_text = self.iso_var.get().strip()
         out_text = self.out_var.get().strip()
@@ -340,6 +377,9 @@ class InstallerApp:
         ]
         if self.force_var.get():
             cmd.append("--force")
+        sdk_bundle = self.sdk_bundle_var.get().strip()
+        if sdk_bundle:
+            cmd.extend(["--sdk-bundle", sdk_bundle])
         if self.launch_var.get():
             cmd.append("--launch")
 
@@ -478,6 +518,8 @@ class InstallerApp:
             self.force_check,
             self.fullscreen_check,
             self.launch_check,
+            self.sdk_bundle_entry,
+            self.sdk_bundle_button,
             self.extract_button,
         ):
             widget.configure(state=state)
@@ -564,6 +606,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--iso", type=Path, help="pre-fill the ISO/XISO path")
     parser.add_argument("--out", type=Path, help=f"pre-fill the game data folder (default: {DEFAULT_OUT})")
+    parser.add_argument("--sdk-bundle", type=Path, help="pre-fill a prebuilt ReXGlue SDK bundle")
     parser.add_argument("--force", action="store_true", help="re-extract files that already exist")
     parser.add_argument("--version", action="version", version="Souls of the Reaper installer 2.0")
     return parser.parse_args(argv)
@@ -572,7 +615,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     root = tk.Tk()
-    InstallerApp(root, args.iso, args.out, args.force)
+    InstallerApp(root, args.iso, args.out, args.force, args.sdk_bundle)
     root.mainloop()
     return 0
 
