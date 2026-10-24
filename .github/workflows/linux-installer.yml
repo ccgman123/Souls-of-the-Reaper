@@ -29,7 +29,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             build-essential git ninja-build pkg-config python3 python3-pip \
-            libgtk-3-dev libx11-xcb-dev libwayland-dev libwayland-bin \
+            libgtk-3-dev libx11-xcb-dev libxss-dev libxtst-dev \
+            libxrandr-dev libxi-dev libxcursor-dev libxinerama-dev \
+            libxfixes-dev libwayland-dev libwayland-bin \
             libdecor-0-dev libvulkan-dev libasound2-dev libpulse-dev \
             libpipewire-0.3-dev libudev-dev libglvnd-dev python3-tk \
             wget ca-certificates gnupg rsync
