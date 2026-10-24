@@ -57,7 +57,7 @@ jobs:
           git -C rexglue-sdk submodule update --init --recursive
           REXSDK_DIR="$PWD/rexglue-sdk" \
             REXSDK_INSTALL="$PWD/rexglue-sdk/out/install/linux-amd64" \
-            ./port/build_sdk.sh -j"$(nproc)"
+            ./port/build_sdk.sh -j "$(nproc)"
 
       - name: Package the SDK bundle
         run: |
