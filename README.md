@@ -60,7 +60,9 @@ SoulsOfTheReaper.exe
 
 The ReXGlue SDK builds natively on Linux with the Vulkan backend. The graphical
 installer handles the whole flow: ISO extraction, pinned SDK bootstrap/build,
-codegen, game build, configuration, and optional launch.
+codegen, game build, configuration, and optional launch. It uses a Qt6
+(PySide6) UI with native Wayland and a dark Fusion theme; the Tkinter UI remains
+a fallback.
 
 ```sh
 ./install-diablo3.sh
@@ -120,18 +122,24 @@ For a persistent CLI command and desktop entry, add the flake input and module:
 ```
 
 After `nixos-rebuild switch`, **Souls of the Reaper** appears in the application
-menu. The desktop entry launches `souls-of-the-reaper install`.
+menu. The desktop entry runs `souls-of-the-reaper play`: it launches the game
+when a build is present, and opens the installer otherwise.
 
 Management commands:
 
 ```sh
+souls-of-the-reaper play      # launch if built, otherwise open the installer
 souls-of-the-reaper install   # fetch latest release, then open the installer
 souls-of-the-reaper update    # fetch the latest release again
-souls-of-the-reaper launch    # launch the installed build
+souls-of-the-reaper launch    # launch the installed build only
 souls-of-the-reaper status    # show cached release/game/build paths
 souls-of-the-reaper uninstall # remove installer/cache; keeps game data
 souls-of-the-reaper uninstall --purge  # also remove game data
 ```
+
+The desktop entry runs `souls-of-the-reaper play`, so clicking **Souls of the
+Reaper** launches the game when it is installed, and opens the installer when
+it is not.
 
 The first install asks for the Xbox 360 ISO and builds the pinned SDK, codegen
 output, and game. It needs network access and the original game data. On

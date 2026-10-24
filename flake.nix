@@ -19,8 +19,9 @@
             cmake
             ninja
             pkg-config
-            # Tkinter is used by the optional graphical ISO installer.
-            (python3.withPackages (ps: [ ps.tkinter ]))
+            # Qt6 installer (Tkinter remains a fallback).
+            (python3.withPackages (ps: [ ps.tkinter ps.pyside6 ]))
+            qt6.qtbase
             git
 
             # Linux windowing/display requirements (SDK uses SDL3 with Wayland + X11 fallback)
@@ -62,6 +63,10 @@
           shellHook = ''
             export CC=clang
             export CXX=clang++
+            # PySide6 ships the Python bindings, while the Qt platform plugins
+            # live in qtbase. Without this, Qt cannot find libqwayland.so.
+            export QT_PLUGIN_PATH="${pkgs.qt6.qtbase}/lib/qt-6/plugins:''${QT_PLUGIN_PATH:-}"
+            export QT_QPA_PLATFORM_PLUGIN_PATH="${pkgs.qt6.qtbase}/lib/qt-6/plugins/platforms"
             # These libraries are dlopen()ed by the Vulkan loader/SDL3 rather
             # than linked, so put them on the loader search path.
             export LD_LIBRARY_PATH="${pkgs.vulkan-loader}/lib:${pkgs.libglvnd}/lib:${pkgs.mesa}/lib:${pkgs.libx11}/lib:${pkgs.libxcb}/lib:${pkgs.libxext}/lib:${pkgs.libxrandr}/lib:${pkgs.libxi}/lib:${pkgs.libxcursor}/lib:${pkgs.libxinerama}/lib:${pkgs.libxscrnsaver}/lib:${pkgs.libxfixes}/lib:${pkgs.libxkbcommon}/lib:${pkgs.wayland}/lib:${pkgs.libdecor}/lib:${pkgs.alsa-lib}/lib:${pkgs.libpulseaudio}/lib:${pkgs.pipewire}/lib:${pkgs.udev}/lib:''${LD_LIBRARY_PATH:-}"

@@ -14,7 +14,7 @@ document covers what is already wired up and what still needs work.
 | Generated-code hand patches | ported to `port/apply_generated_patches.py` |
 | Config writer | ported to `apply_config.py` |
 | Build/codegen scripts | `port/build_sdk.sh`, `port/build.sh`, `port/codegen.sh` |
-| End-to-end installer | `install-diablo3.sh`, `installer/iso_installer.py`, `port/install_game.py` |
+| End-to-end installer | `install-diablo3.sh`, `installer/iso_installer_qt.py`, `installer/iso_installer.py`, `port/install_game.py` |
 | Prebuilt SDK packaging | `port/package_sdk.sh`, `--sdk-bundle` installer option |
 | Window / input / audio | SDL3 (vendored), including borderless windows and HIDAPI controllers |
 | Rendering | Vulkan host-RT hooks ported; full build and runtime verified on Intel Arc (Mesa) — see "Rendering" below |
@@ -118,7 +118,9 @@ manual builds, use `./port/codegen.sh --game-dir DIR`.
 
 ### Graphical installer
 
-The Tkinter installer now runs the complete Linux setup, not just extraction:
+The Qt6/PySide6 installer now runs the complete Linux setup, not just
+extraction. It uses native Wayland when available and a dark Fusion theme; the
+Tkinter frontend remains as a fallback:
 
 ```sh
 ./install-diablo3.sh
@@ -157,11 +159,11 @@ python3 port/install_game.py --iso "/path/to/disc.iso" --extract-only
 python3 port/install_game.py --iso "/path/to/disc.iso" --sdk-dir /path/to/pinned/rexglue-sdk
 ```
 
-The wrapper uses the host Python if Tkinter is available. Otherwise it falls
-back to the Nix dev shell (which includes Tkinter). On a distribution build
-install `python3-tk` (Debian/Ubuntu) or `python3-tkinter` (Fedora). If the
-build toolchain is not on `PATH`, `install_game.py` automatically uses the Nix
-dev shell when Nix is available.
+The wrapper uses Qt6/PySide6 if available, otherwise Tkinter. If neither is
+available it falls back to the Nix dev shell (which includes both). On a
+distribution build install `python3-pyside6` (or `python3-tk` as a fallback).
+If the build toolchain is not on `PATH`, `install_game.py` automatically uses
+the Nix dev shell when Nix is available.
 
 ### Prebuilt SDK bundle
 

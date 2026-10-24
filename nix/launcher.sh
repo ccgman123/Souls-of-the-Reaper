@@ -22,15 +22,17 @@ usage() {
 Souls of the Reaper — NixOS installer/manager
 
 Usage:
+  souls-of-the-reaper play    [launcher options]
   souls-of-the-reaper install [installer options]
   souls-of-the-reaper update  [installer options]
   souls-of-the-reaper launch  [launcher options]
   souls-of-the-reaper status
   souls-of-the-reaper uninstall [--purge]
 
+play      Launch the installed game, or open the installer if not built yet.
 install   Fetch the latest release, then open the graphical installer.
 update    Fetch the latest release even if it is already cached.
-launch    Launch the currently installed build.
+launch    Launch the currently installed build (error if not built).
 status    Show the cached release and build paths.
 uninstall Remove downloaded installers/cache. --purge also removes game data.
 
@@ -173,6 +175,19 @@ current_installer() {
   readlink -f "$INSTALLER_DIR/current"
 }
 
+cmd_play() {
+  if [ -L "$INSTALLER_DIR/current" ]; then
+    local dir
+    dir=$(readlink -f "$INSTALLER_DIR/current")
+    if [ -x "$dir/port/out/build/linux-amd64-relwithdebinfo/diablo3" ] &&
+       [ -f "$dir/port/out/build/linux-amd64-relwithdebinfo/diablo3.toml" ] &&
+       [ -f "$GAME_DIR/default.xex" ]; then
+      exec "$dir/launch-diablo3.sh" "$@"
+    fi
+  fi
+  cmd_install 0 "$@"
+}
+
 cmd_install() {
   local force=${1:-0}
   shift || true
@@ -225,7 +240,8 @@ cmd_uninstall() {
   fi
 }
 
-case "${1:-install}" in
+case "${1:-play}" in
+  play) shift || true; cmd_play "$@" ;;
   install) shift || true; cmd_install 0 "$@" ;;
   update) shift || true; cmd_update "$@" ;;
   launch) shift || true; cmd_launch "$@" ;;
