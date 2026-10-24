@@ -89,6 +89,55 @@ On non-NixOS systems, install the distro packages listed in
 built inside Nix is tied to `/nix/store` and is not portable to a machine
 without Nix — rebuild on the target, or install Nix there too.
 
+### NixOS
+
+The flake includes a NixOS installer/manager. It fetches the latest installer
+release from the fork at runtime, keeps the downloaded release and game data
+under `~/.local/share/souls-of-the-reaper`, and runs the graphical installer
+inside the release’s own Nix dev shell.
+
+Quick run without installing:
+
+```sh
+nix run github:ccgman123/Souls-of-the-Reaper -- install
+```
+
+For a persistent CLI command and desktop entry, add the flake input and module:
+
+```nix
+{
+  inputs.souls-of-the-reaper.url = "github:ccgman123/Souls-of-the-Reaper";
+
+  outputs = { self, nixpkgs, souls-of-the-reaper, ... }: {
+    nixosConfigurations.my-host = nixpkgs.lib.nixosSystem {
+      modules = [
+        souls-of-the-reaper.nixosModules.default
+        ./configuration.nix
+      ];
+    };
+  };
+}
+```
+
+After `nixos-rebuild switch`, **Souls of the Reaper** appears in the application
+menu. The desktop entry launches `souls-of-the-reaper install`.
+
+Management commands:
+
+```sh
+souls-of-the-reaper install   # fetch latest release, then open the installer
+souls-of-the-reaper update    # fetch the latest release again
+souls-of-the-reaper launch    # launch the installed build
+souls-of-the-reaper status    # show cached release/game/build paths
+souls-of-the-reaper uninstall # remove installer/cache; keeps game data
+souls-of-the-reaper uninstall --purge  # also remove game data
+```
+
+The first install asks for the Xbox 360 ISO and builds the pinned SDK, codegen
+output, and game. It needs network access and the original game data. On
+NixOS, the CI-built Ubuntu/glibc SDK bundle is ignored automatically because
+it cannot execute there; the installer builds the SDK with Nix instead.
+
 On Wayland sessions the game uses the native SDL3 Wayland backend
 (`VK_KHR_wayland_surface`) by default; XWayland remains an automatic fallback.
 Set `SDL_VIDEODRIVER=x11` to force the old path.

@@ -1,10 +1,10 @@
 {
-  description = "Souls of the Reaper - native Linux build environment";
+  description = "Souls of the Reaper - native Linux build and NixOS installer";
 
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 
   outputs =
-    { nixpkgs, ... }:
+    { self, nixpkgs, ... }:
     let
       systems = [ "x86_64-linux" "aarch64-linux" ];
       forAll = f: nixpkgs.lib.genAttrs systems (system: f nixpkgs.legacyPackages.${system});
@@ -71,5 +71,61 @@
           '';
         };
       });
+
+      packages = forAll (pkgs: {
+        default = pkgs.stdenvNoCC.mkDerivation {
+          pname = "souls-of-the-reaper-installer";
+          version = "latest";
+          dontUnpack = true;
+          nativeBuildInputs = [ pkgs.makeWrapper ];
+          installPhase = ''
+            runHook preInstall
+            mkdir -p "$out/bin" "$out/share/applications"
+            install -m755 ${./nix/launcher.sh} "$out/bin/souls-of-the-reaper"
+            install -m644 ${./nix/souls-of-the-reaper.desktop} \
+              "$out/share/applications/souls-of-the-reaper.desktop"
+            wrapProgram "$out/bin/souls-of-the-reaper" \
+              --prefix PATH : ${
+                pkgs.lib.makeBinPath [
+                  pkgs.bash
+                  pkgs.coreutils
+                  pkgs.curl
+                  pkgs.gawk
+                  pkgs.git
+                  pkgs.gnutar
+                  pkgs.gzip
+                  pkgs.nix
+                  pkgs.python3
+                ]
+              }
+            runHook postInstall
+          '';
+          meta = {
+            description = "NixOS installer/manager for the Souls of the Reaper Linux port";
+            homepage = "https://github.com/ccgman123/Souls-of-the-Reaper";
+            mainProgram = "souls-of-the-reaper";
+            platforms = [ "x86_64-linux" ];
+          };
+        };
+      });
+
+      apps = forAll (pkgs: {
+        default = {
+          type = "app";
+          program = "${self.packages.${pkgs.stdenv.hostPlatform.system}.default}/bin/souls-of-the-reaper";
+        };
+        install = {
+          type = "app";
+          program = "${self.packages.${pkgs.stdenv.hostPlatform.system}.default}/bin/souls-of-the-reaper";
+        };
+      });
+
+      nixosModules.default =
+        { pkgs, ... }:
+        {
+          environment.systemPackages = [
+            self.packages.${pkgs.stdenv.hostPlatform.system}.default
+          ];
+        };
     };
 }
