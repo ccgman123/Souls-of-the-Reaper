@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Launch the Diablo III Linux port with the runtime libraries it needs
-# (Vulkan loader, ALSA/PulseAudio/PipeWire) and the tested X11 SDL backend.
+# (Vulkan loader, Wayland/X11, ALSA/PulseAudio/PipeWire). SDL selects the
+# native session backend by default; set SDL_VIDEODRIVER to override it.
 #
 # A binary built inside the Nix dev shell needs the Nix store runtime paths.
 # The first such launch caches LD_LIBRARY_PATH, so later launches skip
@@ -51,22 +52,26 @@ if [ "$binary_uses_nix" = 1 ]; then
     # If Nix garbage collection removed the dev-shell libraries, rebuild the
     # cache. Check the libraries that are dlopen()ed at startup: Vulkan, GTK's
     # GLX probe (libGL), SDL's udev/HIDAPI enumeration (libudev), and SDL's
-    # dynamically loaded X11 backend.
+    # dynamically loaded Wayland/X11 backends.
     IFS=':' read -r -a cached_dirs < "$ENV_CACHE"
     vulkan_found=0
     libgl_found=0
     libudev_found=0
     libx11_found=0
+    libwayland_found=0
+    libdecor_found=0
     for dir in "${cached_dirs[@]}"; do
       if [ -n "$dir" ]; then
         [ -e "$dir/libvulkan.so.1" ] && vulkan_found=1
         [ -e "$dir/libGL.so.1" ] && libgl_found=1
         [ -e "$dir/libudev.so.1" ] && libudev_found=1
         [ -e "$dir/libX11.so.6" ] && libx11_found=1
+        [ -e "$dir/libwayland-client.so.0" ] && libwayland_found=1
+        [ -e "$dir/libdecor-0.so.0" ] && libdecor_found=1
       fi
     done
     if [ "$vulkan_found" = 0 ] || [ "$libgl_found" = 0 ] || [ "$libudev_found" = 0 ] ||
-       [ "$libx11_found" = 0 ]; then
+       [ "$libx11_found" = 0 ] || [ "$libwayland_found" = 0 ] || [ "$libdecor_found" = 0 ]; then
       needs_env=1
     fi
   fi
@@ -101,6 +106,8 @@ fi
 unset LD_PRELOAD
 
 export DISPLAY="${DISPLAY:-:0}"
-export SDL_VIDEODRIVER="${SDL_VIDEODRIVER:-x11}"
+# Do not force X11: SDL picks Wayland on a Wayland session and falls back to
+# X11 when no Wayland display is available. Set SDL_VIDEODRIVER explicitly to
+# force a backend (for example, SDL_VIDEODRIVER=x11 ./launch-diablo3.sh).
 
 exec "$BIN" --log_file "$LOG" "$@"

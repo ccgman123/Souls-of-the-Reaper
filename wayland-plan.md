@@ -1,29 +1,63 @@
 # Native Wayland Support — Scope and Implementation Plan
 
-Status: **proposed, not implemented**  
-Target: Diablo III Linux port / ReXGlue SDK  
-Test host: KWin Wayland, Intel Arc B390 (Mesa 26.1.8), 2560×1440  
+Status: **core native-Wayland path implemented; broader matrix pending**
+Target: Diablo III Linux port / ReXGlue SDK
+Test host: KWin Wayland, Intel Arc B390 (Mesa 26.1.8), 2560×1440
+
+> **Implementation note (2026-10-23):** the current SDK uses **SDL3**, not GTK.
+> The v0.10 SDK already contains the Wayland surface type, SDL window
+> properties, Vulkan `VK_KHR_wayland_surface` setup, and presenter branch. The
+> backend was being compiled out because `wayland-scanner` was unavailable, so
+> SDL silently built without Wayland. The current fix adds `wayland-scanner`
+> and libdecor to the dev shell, passes the scanner to the SDK build, and lets
+> SDL choose the session-native backend (Wayland with X11 fallback). The GTK
+> sections below are retained as historical design context, not as the current
+> implementation route.
 
 ## 1. Summary
 
-The port currently runs through **XWayland**. Native Wayland is blocked by three
-independent X11 assumptions:
+The port previously ran through **XWayland**. In the current v0.10/SDL3
+architecture, the remaining blockers were not the Wayland surface code (which
+upstream already provides), but the build and launcher:
 
-1. `src/ui/windowed_app_main_posix.cpp` unconditionally sets
-   `GDK_BACKEND=x11` before GTK initializes.
-2. `GTKWindow::CreateSurfaceImpl` only implements
-   `Surface::kTypeIndex_XcbWindow`; there is a literal
-   `// TODO(Triang3l): Wayland surface.` in `src/ui/window_gtk.cpp`.
-3. The Vulkan instance only enables `VK_KHR_xcb_surface`, and
-   `VulkanPresenter` only creates `VkXcbSurfaceKHR`.
+1. SDL was configured with `SDL_WAYLAND=ON` but silently compiled the backend
+   out because `wayland-scanner` was missing.
+2. The launcher forced `SDL_VIDEODRIVER=x11`.
+3. The runtime environment cache did not validate the dynamically loaded
+   Wayland/libdecor libraries.
 
-The goal is to add a **GTK3 Wayland window + `VK_KHR_wayland_surface`** path,
-keep XWayland as a fallback, and preserve the current rendering, input, audio,
-borderless, and 60 FPS behavior.
+The goal is to use the native **SDL3 Wayland window + `VK_KHR_wayland_surface`**
+path, keep X11 as a fallback, and preserve the current rendering, input, audio,
+borderless, and fullscreen behavior.
 
 This is a **moderate SDK/window-system change**, not a config toggle. The main
 technical risk is GTK3 and Vulkan WSI both owning the same `wl_surface`, so the
 plan starts with a **two-day prototype decision gate** before full integration.
+
+## 1a. Current implementation status
+
+The SDL3-based native Wayland path is now working under KWin:
+
+- `SDL_VIDEODRIVER` is no longer forced to `x11` by the launcher.
+- SDL reports `SDL video driver: wayland`.
+- Vulkan enables `VK_KHR_wayland_surface` and creates a Wayland swapchain.
+- The game has no X11 window; `xdotool` cannot find it.
+- Gamepad enumeration and the initial menu path work.
+- Fullscreen creates a 2880×1919 native-Wayland client surface on the tested
+  2880×1920 desktop.
+
+Build/runtime changes:
+
+- `flake.nix` includes `wayland`, `wayland-scanner`, and `libdecor`.
+- `port/build_sdk.sh` passes `-DWAYLAND_SCANNER=...` and `-DSDL_WAYLAND=ON` to
+  the SDK configure step.
+- The launcher cache validates the Wayland and libdecor runtime libraries.
+- X11 remains an automatic SDL fallback and can be forced with
+  `SDL_VIDEODRIVER=x11`.
+
+Still to validate before declaring the whole matrix complete: gameplay input
+and audio over a long session, borderless/fullscreen transitions,
+multi-monitor and compositor coverage, and performance parity across modes.
 
 ## 2. Goals and non-goals
 
@@ -50,6 +84,11 @@ plan starts with a **two-day prototype decision gate** before full integration.
 
 ## 3. Current architecture and exact touch points
 
+> The table below documents the earlier GTK3 architecture. The current v0.10
+> port uses `WindowSDL`; the equivalent Wayland touch points are
+> `src/ui/window_sdl.cpp`, `src/ui/surface_gnulinux.*`, and the Vulkan
+> instance/presenter Wayland branches.
+
 | Area | File(s) | Current behavior |
 |---|---|---|
 | GTK backend selection | `src/ui/windowed_app_main_posix.cpp` | `GDK_BACKEND=x11` forced before `gtk_init_check`. |
@@ -68,7 +107,11 @@ The game window is the GTK window; SDL3 is used for input/audio, not for the
 main window. Native Wayland therefore means **GTK Wayland**, not simply
 changing `SDL_VIDEODRIVER`.
 
-## 4. Design options
+## 4. Design options (historical — GTK3 path superseded by SDL3)
+
+These options describe the earlier GTK3 window architecture. The current SDK
+uses SDL3, whose Wayland properties and Vulkan surface path are already
+implemented; they are retained here for historical context.
 
 ### Option A — GTK3 Wayland surface directly (recommended first prototype)
 

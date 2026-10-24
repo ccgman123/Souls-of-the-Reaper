@@ -23,7 +23,7 @@
             (python3.withPackages (ps: [ ps.tkinter ]))
             git
 
-            # Linux windowing/display requirements (SDK uses GTK3 + x11-xcb)
+            # Linux windowing/display requirements (SDK uses SDL3 with Wayland + X11 fallback)
             gtk3
             libx11
             libxcb
@@ -35,6 +35,11 @@
             libxscrnsaver
             libxfixes
             libxkbcommon
+
+            # Native Wayland windowing and SDL's Wayland backend
+            wayland
+            wayland-scanner
+            libdecor
 
             # Vulkan backend
             vulkan-loader
@@ -59,7 +64,7 @@
             export CXX=clang++
             # These libraries are dlopen()ed by the Vulkan loader/SDL3 rather
             # than linked, so put them on the loader search path.
-            export LD_LIBRARY_PATH="${pkgs.vulkan-loader}/lib:${pkgs.libglvnd}/lib:${pkgs.mesa}/lib:${pkgs.libx11}/lib:${pkgs.libxcb}/lib:${pkgs.libxext}/lib:${pkgs.libxrandr}/lib:${pkgs.libxi}/lib:${pkgs.libxcursor}/lib:${pkgs.libxinerama}/lib:${pkgs.libxscrnsaver}/lib:${pkgs.libxfixes}/lib:${pkgs.libxkbcommon}/lib:${pkgs.alsa-lib}/lib:${pkgs.libpulseaudio}/lib:${pkgs.pipewire}/lib:${pkgs.udev}/lib:''${LD_LIBRARY_PATH:-}"
+            export LD_LIBRARY_PATH="${pkgs.vulkan-loader}/lib:${pkgs.libglvnd}/lib:${pkgs.mesa}/lib:${pkgs.libx11}/lib:${pkgs.libxcb}/lib:${pkgs.libxext}/lib:${pkgs.libxrandr}/lib:${pkgs.libxi}/lib:${pkgs.libxcursor}/lib:${pkgs.libxinerama}/lib:${pkgs.libxscrnsaver}/lib:${pkgs.libxfixes}/lib:${pkgs.libxkbcommon}/lib:${pkgs.wayland}/lib:${pkgs.libdecor}/lib:${pkgs.alsa-lib}/lib:${pkgs.libpulseaudio}/lib:${pkgs.pipewire}/lib:${pkgs.udev}/lib:''${LD_LIBRARY_PATH:-}"
             echo "Souls of the Reaper - Linux dev shell"
             echo "  ./port/codegen.sh    # transcode game/default.xex (needs game data)"
             echo "  ./port/build.sh      # build port/out/build/linux-amd64-relwithdebinfo/diablo3"

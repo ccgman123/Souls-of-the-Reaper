@@ -46,8 +46,18 @@ if [ "$CLEAN" = 1 ]; then
     rm -rf "$SDK_BUILD"
 fi
 
+WAYLAND_SCANNER_ARG=""
+if command -v wayland-scanner >/dev/null 2>&1; then
+    WAYLAND_SCANNER_ARG="-DWAYLAND_SCANNER=$(command -v wayland-scanner)"
+else
+    echo "WARNING: wayland-scanner not found; SDL will build without native Wayland support." >&2
+    echo "         Install libwayland-bin/libwayland-dev or use the Nix dev shell." >&2
+fi
+
 echo "==> Configuring ReXGlue SDK"
 ( cd "$SDK" && cmake --preset linux-amd64 \
+    $WAYLAND_SCANNER_ARG \
+    -DSDL_WAYLAND=ON \
     -DREXGLUE_ENABLE_TRACY=OFF \
     -DREXGLUE_BUILD_TESTS=OFF \
     -DREXGLUE_USE_D3D12=OFF \

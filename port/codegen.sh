@@ -8,7 +8,7 @@
 # This is the Linux equivalent of steps 1-2 in the README.
 #
 # Requirements: same as build.sh (clang >= 18, cmake, ninja, pkg-config,
-# GTK3/X11/Vulkan/audio development headers), plus the decrypted Xbox 360 XEX
+# Wayland/X11/Vulkan/audio development headers), plus the decrypted Xbox 360 XEX
 # at game/default.xex (manifest paths are relative to port/).
 #
 # Usage:
@@ -51,7 +51,7 @@ die() { echo "ERROR: $*" >&2; exit 1; }
 
 command -v cmake >/dev/null 2>&1 || die "cmake not found (need >= 3.25)"
 command -v ninja >/dev/null 2>&1 || die "ninja not found"
-command -v pkg-config >/dev/null 2>&1 || die "pkg-config not found (needed for GTK3/X11)"
+command -v pkg-config >/dev/null 2>&1 || die "pkg-config not found (needed for Wayland/X11)"
 [ -d "$SDK" ] || die "ReXGlue SDK not found at $SDK (clone it or set REXSDK_DIR)"
 [ -f "$MANIFEST" ] || die "manifest not found: $MANIFEST"
 [ -f "$XEX" ] || die "missing $XEX (decrypted XEX; see docs/LINUX.md)"

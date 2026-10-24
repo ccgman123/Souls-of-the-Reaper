@@ -32,9 +32,9 @@ Debian/Ubuntu:
 
 ```sh
 sudo apt install build-essential git cmake ninja-build clang lld \
-  pkg-config libgtk-3-dev libx11-xcb-dev libvulkan-dev \
-  libasound2-dev libpulse-dev libpipewire-0.3-dev libudev-dev \
-  libglvnd-dev python3-tk
+  pkg-config libgtk-3-dev libx11-xcb-dev libwayland-dev libwayland-bin \
+  libdecor-0-dev libvulkan-dev libasound2-dev libpulse-dev \
+  libpipewire-0.3-dev libudev-dev libglvnd-dev python3-tk
 ```
 
 Fedora:
@@ -42,9 +42,15 @@ Fedora:
 ```sh
 sudo dnf install git cmake ninja-build clang lld \
   pkgconf-pkg-config gtk3-devel libX11-devel libxcb-devel \
+  wayland-devel libdecor-devel \
   vulkan-loader-devel alsa-lib-devel pulseaudio-libs-devel pipewire-devel \
   systemd-devel libglvnd-devel python3-tkinter
 ```
+
+Native Wayland support in the vendored SDL3 build requires `wayland-scanner`
+at SDK configure time. If it is missing, SDL silently builds without the
+Wayland backend and only X11 remains available. `port/build_sdk.sh` passes the
+scanner path explicitly when it is on `PATH`.
 
 Or use the provided dev shell:
 
@@ -185,8 +191,20 @@ with the distro packages above) does **not** need Nix. The launcher detects
 that and runs the binary directly with the system Vulkan/ALSA/Pulse paths. The
 prebuilt `port/out/.../diablo3` from a Nix build is **not portable** to a
 non-NixOS machine - rebuild on the target distribution, or install Nix there.
-On Wayland desktops the port still uses XWayland (see "Wayland" in the plan);
-native Wayland is not implemented yet.
+On Wayland desktops the port now uses the native SDL3 Wayland backend by
+default. It presents through `VK_KHR_wayland_surface` and does not create an
+XWayland game window. If Wayland initialization is unavailable, SDL falls back
+to X11 automatically. Force a backend when needed:
+
+```sh
+SDL_VIDEODRIVER=wayland ./launch-diablo3.sh
+SDL_VIDEODRIVER=x11 ./launch-diablo3.sh
+```
+
+The native Wayland path was verified under KWin: SDL reports the `wayland`
+video driver, Vulkan creates a `VK_KHR_wayland_surface` swapchain, gamepad
+enumeration works, and `xdotool` cannot find the game window. Fullscreen and
+borderless modes still need broader multi-monitor/compositor testing.
 
 ```sh
 # Distribution build on a non-NixOS system:
@@ -340,9 +358,10 @@ Diablo III's 3D viewport is 16:9. A 16:9 mode fills the window correctly. A
 wider mode such as `2560x1080` renders the full-width title art, but the menu
 and gameplay are letterboxed to 16:9 because the game clamps the in-game
 aspect; true 21:9 FOV would require a game-side patch. `fullscreen = true` now
-uses SDL desktop fullscreen; on the tested 2880×1920 XWayland desktop it
-creates a 2880×1920 swapchain and letterboxes the 16:9 game image to
-2880×1620. Use the borderless window when you want an exact windowed size:
+uses SDL desktop fullscreen. On the tested 2880×1920 desktop it creates a
+2880×1920 swapchain (native Wayland reports 2880×1919 client pixels) and
+letterboxes the 16:9 game image to 2880×1620. Use the borderless window when
+you want an exact windowed size:
 
 ```sh
 python3 apply_config.py --resolution 1440p --borderless true

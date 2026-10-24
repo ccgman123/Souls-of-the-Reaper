@@ -83,6 +83,10 @@ On non-NixOS systems, install the distro packages listed in
 built inside Nix is tied to `/nix/store` and is not portable to a machine
 without Nix — rebuild on the target, or install Nix there too.
 
+On Wayland sessions the game uses the native SDL3 Wayland backend
+(`VK_KHR_wayland_surface`) by default; XWayland remains an automatic fallback.
+Set `SDL_VIDEODRIVER=x11` to force the old path.
+
 The scripts apply the pinned ReXGlue 0.10 registration/object-reference/
 keyboard/username/System Link patches, the Windows/D3D12 runtime patch,
 `patches/rexglue-sdk-linux.patch`, the Linux delta (Vulkan host-render-target

@@ -7,8 +7,9 @@
 #
 # Requirements (Debian/Ubuntu names):
 #   clang/clang++ >= 18, lld, cmake >= 3.25, ninja-build, git,
-#   pkg-config, libgtk-3-dev, libx11-xcb-dev, libvulkan-dev,
-#   libasound2-dev, libpulse-dev, libudev-dev, libglvnd-dev
+#   pkg-config, libgtk-3-dev, libx11-xcb-dev, libwayland-dev,
+#   libdecor-0-dev, libvulkan-dev, libasound2-dev, libpulse-dev,
+#   libudev-dev, libglvnd-dev
 # The SDK vendors SDL3, Vulkan headers/loader glue (volk), FFmpeg, glslang and
 # friends, so those are not system packages.
 #
@@ -64,7 +65,7 @@ die() { echo "ERROR: $*" >&2; exit 1; }
 
 command -v cmake >/dev/null 2>&1 || die "cmake not found (need >= 3.25)"
 command -v ninja >/dev/null 2>&1 || die "ninja not found"
-command -v pkg-config >/dev/null 2>&1 || die "pkg-config not found (needed for GTK3/X11)"
+command -v pkg-config >/dev/null 2>&1 || die "pkg-config not found (needed for Wayland/X11)"
 [ -d "$SDK" ] || die "ReXGlue SDK not found at $SDK (clone it or set REXSDK_DIR)"
 
 if [ -n "${CC:-}" ]; then COMPILER_C=$CC; elif command -v clang-20 >/dev/null 2>&1; then COMPILER_C=clang-20; else COMPILER_C=clang; fi
