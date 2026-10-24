@@ -339,10 +339,10 @@ run can still use a 60 FPS resolution budget. On the tested Intel Arc B390, a
 Diablo III's 3D viewport is 16:9. A 16:9 mode fills the window correctly. A
 wider mode such as `2560x1080` renders the full-width title art, but the menu
 and gameplay are letterboxed to 16:9 because the game clamps the in-game
-aspect; true 21:9 FOV would require a game-side patch. `fullscreen = true` is
-currently unreliable under XWayland (it can select a bogus 2880x1920 mode).
-Use the borderless window instead, which fills the desktop at the configured
-native resolution without decorations:
+aspect; true 21:9 FOV would require a game-side patch. `fullscreen = true` now
+uses SDL desktop fullscreen; on the tested 2880×1920 XWayland desktop it
+creates a 2880×1920 swapchain and letterboxes the 16:9 game image to
+2880×1620. Use the borderless window when you want an exact windowed size:
 
 ```sh
 python3 apply_config.py --resolution 1440p --borderless true
